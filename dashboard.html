@@ -1,0 +1,2615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inventario ABC</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #1c2333; --bg4: #21262d;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+    --text: #e6edf3; --text2: #8b949e; --text3: #6e7681;
+    --a: #3fb950; --b: #58a6ff; --c: #ffa657; --d: #f0883e; --e: #f85149; --n: #8b949e;
+    --a-bg: rgba(63,185,80,0.1); --b-bg: rgba(88,166,255,0.1);
+    --c-bg: rgba(255,166,87,0.1); --d-bg: rgba(248,97,73,0.1);
+    --e-bg: rgba(248,81,73,0.12); --n-bg: rgba(139,148,158,0.1);
+    --gold: #d4a853; --gold-bg: rgba(212,168,83,0.1);
+    --rad: 8px; --rad2: 12px;
+    --font: 'Barlow', sans-serif; --font-num: 'IBM Plex Mono', monospace;
+    --font-head: 'Barlow Condensed', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; width: 220px;
+    background: var(--bg2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; z-index: 100;
+  }
+  .sidebar-logo {
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-logo .title { font-family: var(--font-head); font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: 0.3px; }
+  .sidebar-logo .sub { font-size: 11px; color: var(--text3); margin-top: 3px; font-family: var(--font-num); }
+  .nav-section { padding: 12px 8px 4px; font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border-radius: var(--rad); margin: 2px 8px; cursor: pointer;
+    color: var(--text2); font-size: 13px; font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--bg4); color: var(--gold); }
+  .nav-item .icon { width: 16px; text-align: center; font-size: 13px; }
+  .sidebar-footer { margin-top: auto; padding: 12px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text3); }
+  .sidebar-footer .date-label { color: var(--text2); font-weight: 500; }
+
+  /* MAIN */
+  .main { margin-left: 220px; min-height: 100vh; }
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0 24px; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .topbar-title { font-family: var(--font-head); font-size: 20px; font-weight: 700; color: var(--text); }
+  .page-content { padding: 24px; display: none; }
+  .page-content.active { display: block; }
+
+  /* CHIPS */
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: var(--font-num); letter-spacing: 0.5px; }
+  .chip-a { background: var(--a-bg); color: var(--a); border: 1px solid rgba(63,185,80,0.25); }
+  .chip-b { background: var(--b-bg); color: var(--b); border: 1px solid rgba(88,166,255,0.25); }
+  .chip-c { background: var(--c-bg); color: var(--c); border: 1px solid rgba(255,166,87,0.25); }
+  .chip-d { background: var(--d-bg); color: var(--d); border: 1px solid rgba(248,97,73,0.25); }
+  .chip-e { background: var(--e-bg); color: var(--e); border: 1px solid rgba(248,81,73,0.3); }
+  .chip-n { background: var(--n-bg); color: var(--n); border: 1px solid rgba(139,148,158,0.2); }
+
+  /* KPI CARDS */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--rad2);
+    padding: 16px 18px; position: relative; overflow: hidden;
+  }
+  .kpi-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .kpi-card.gold::before { background: var(--gold); }
+  .kpi-card.green::before { background: var(--a); }
+  .kpi-card.blue::before { background: var(--b); }
+  .kpi-card.orange::before { background: var(--c); }
+  .kpi-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+  .kpi-value { font-family: var(--font-num); font-size: 26px; font-weight: 500; color: var(--text); line-height: 1; }
+  .kpi-sub { font-size: 11px; color: var(--text3); margin-top: 5px; }
+
+  /* SECTION HEADER */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; margin-top: 8px; }
+  .section-title { font-family: var(--font-head); font-size: 15px; font-weight: 600; color: var(--text2); letter-spacing: 0.5px; text-transform: uppercase; }
+
+  /* GRID 2 COL */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+  /* PANEL */
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--rad2); padding: 18px; }
+  .panel-title { font-family: var(--font-head); font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; }
+
+  /* ABC TABLE */
+  .abc-table { width: 100%; border-collapse: collapse; }
+  .abc-table th { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  .abc-table th:first-child { text-align: left; }
+  .abc-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); font-family: var(--font-num); font-size: 13px; color: var(--text); text-align: right; }
+  .abc-table td:first-child { text-align: left; }
+  .abc-table tr:last-child td { border-bottom: none; }
+  .abc-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .bar-cell { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .mini-bar { height: 6px; border-radius: 3px; min-width: 2px; }
+
+  /* CHART WRAPPER */
+  .chart-wrap { position: relative; width: 100%; height: 280px; }
+  .chart-wrap-tall { position: relative; width: 100%; height: 340px; }
+  .chart-wrap-short { position: relative; width: 100%; height: 220px; }
+
+  /* CENTRO COMPARISON */
+  .centro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .centro-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--border);
+  }
+  .centro-badge {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-num); font-size: 12px; font-weight: 500;
+  }
+  .badge-4105 { background: rgba(88,166,255,0.15); color: var(--b); border: 1px solid rgba(88,166,255,0.3); }
+  .badge-4106 { background: rgba(63,185,80,0.15); color: var(--a); border: 1px solid rgba(63,185,80,0.3); }
+  .centro-name { font-family: var(--font-head); font-size: 16px; font-weight: 700; }
+
+  /* SEGUIMIENTO SEMANAL */
+  .week-table { width: 100%; border-collapse: collapse; }
+  .week-table th { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+  .week-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); vertical-align: top; }
+  .week-table tr:last-child td { border-bottom: none; }
+  .week-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .status-open { background: rgba(255,166,87,0.15); color: var(--c); }
+  .status-done { background: rgba(63,185,80,0.12); color: var(--a); }
+  .status-risk { background: rgba(248,81,73,0.12); color: var(--e); }
+
+  /* COMMENTS */
+  .comment-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--rad); padding: 14px; margin-bottom: 10px; }
+  .comment-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .comment-author { font-size: 12px; font-weight: 600; color: var(--gold); }
+  .comment-date { font-size: 11px; color: var(--text3); font-family: var(--font-num); }
+  .comment-tag { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .comment-text { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .comment-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; padding: 2px 4px; }
+  .comment-del:hover { color: var(--e); }
+
+  /* FORM ELEMENTS */
+  input, textarea, select {
+    background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--rad);
+    color: var(--text); font-family: var(--font); font-size: 13px; padding: 8px 12px;
+    outline: none; transition: border-color 0.15s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--gold); }
+  textarea { resize: vertical; min-height: 80px; width: 100%; }
+  select { appearance: none; cursor: pointer; }
+  .form-row { display: grid; gap: 10px; margin-bottom: 12px; }
+  .form-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .form-row-2 { grid-template-columns: 1fr 1fr; }
+  .form-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: block; }
+
+  /* BUTTONS */
+  .btn { padding: 8px 18px; border-radius: var(--rad); border: 1px solid var(--border2); background: var(--bg4); color: var(--text); font-family: var(--font); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  .btn:hover { border-color: var(--gold); color: var(--gold); }
+  .btn-primary { background: var(--gold); border-color: var(--gold); color: #0d1117; font-weight: 600; }
+  .btn-primary:hover { background: #c49040; border-color: #c49040; color: #0d1117; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-danger { border-color: rgba(248,81,73,0.4); color: var(--e); background: var(--e-bg); }
+
+  /* LEGEND */
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* ADD WEEK ROW */
+  .add-week-form { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--rad2); padding: 16px; margin-top: 16px; }
+  .add-week-title { font-family: var(--font-head); font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
+
+  /* DIVIDER */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  /* TOOLTIP-like info */
+  .info-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg3); border-radius: var(--rad); border-left: 3px solid var(--gold); font-size: 12px; color: var(--text2); margin-bottom: 12px; }
+
+  /* PROGRESS BARS */
+  .prog-wrap { background: var(--bg3); border-radius: 4px; height: 8px; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 4px; }
+
+
+  /* FILTER BAR */
+  .filter-bar { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; align-items:flex-end; }
+  .filter-group { display:flex; flex-direction:column; gap:4px; }
+  .filter-group label { font-size:10px; color:var(--text3); font-weight:600; text-transform:uppercase; letter-spacing:0.8px; }
+  .filter-group select, .filter-group input { min-width:160px; }
+  .filter-results { font-size:12px; color:var(--text3); font-family:var(--font-num); padding:4px 0; }
+
+  /* MAT TABLE */
+  .mat-table-wrap { overflow-x:auto; max-height:65vh; overflow-y:auto; border:1px solid var(--border); border-radius:var(--rad2); }
+  .mat-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .mat-table thead tr { position:sticky; top:0; z-index:10; background:var(--bg3); }
+  .mat-table th { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.8px; padding:9px 12px; border-bottom:1px solid var(--border2); text-align:left; white-space:nowrap; cursor:pointer; user-select:none; }
+  .mat-table th:hover { color:var(--gold); }
+  .mat-table td { padding:8px 12px; border-bottom:1px solid var(--border); font-family:var(--font-num); font-size:12px; color:var(--text); white-space:nowrap; }
+  .mat-table td.desc-cell { font-family:var(--font); color:var(--text2); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mat-table tr:hover td { background:rgba(255,255,255,0.025); }
+  .mat-table tbody tr:last-child td { border-bottom:none; }
+  .sort-indicator { color:var(--gold); margin-left:3px; }
+
+  /* CRUCE CARD */
+  .cruce-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--font-num); }
+  .cruce-badge.high { background:rgba(63,185,80,0.12); color:#3fb950; border:1px solid rgba(63,185,80,0.25); }
+  .cruce-badge.low { background:rgba(248,81,73,0.1); color:#f85149; border:1px solid rgba(248,81,73,0.2); }
+  .cruce-arrow { color:var(--gold); margin:0 4px; }
+
+  /* PAGINATION */
+  .pager { display:flex; align-items:center; gap:8px; margin-top:12px; justify-content:flex-end; }
+  .pager button { background:var(--bg3); border:1px solid var(--border2); color:var(--text2); padding:5px 12px; border-radius:var(--rad); font-size:12px; cursor:pointer; transition:all 0.15s; }
+  .pager button:hover { border-color:var(--gold); color:var(--gold); }
+  .pager button:disabled { opacity:0.35; cursor:default; pointer-events:none; }
+  .pager .page-info { font-size:12px; color:var(--text3); font-family:var(--font-num); min-width:120px; text-align:center; }
+
+  /* CRUCE SUMMARY */
+  .cruce-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  .cruce-kpi { background:var(--bg2); border:1px solid var(--border); border-radius:var(--rad); padding:12px 14px; }
+  .cruce-kpi .ck-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:0.7px; margin-bottom:5px; }
+  .cruce-kpi .ck-value { font-family:var(--font-num); font-size:20px; font-weight:500; }
+  .ck-sub { font-size:11px; color:var(--text3); margin-top:2px; font-family:var(--font-num); }
+
+
+  /* MAIN FILTER BAR */
+  .main-filter-bar { display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;
+    background:var(--bg2); border:1px solid var(--border); border-radius:var(--rad);
+    padding:12px 16px; margin-bottom:16px; }
+
+  /* EXPORT BTN */
+  .btn-export { padding:6px 14px; border-radius:var(--rad); border:1px solid var(--border2); background:var(--bg4); color:var(--text2); font-family:var(--font); font-size:12px; cursor:pointer; transition:all 0.15s; }
+  .btn-export:hover { border-color:var(--gold); color:var(--gold); }
+
+
+  .filter-bar { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; align-items:flex-end; }
+  .filter-group { display:flex; flex-direction:column; gap:4px; }
+  .filter-group label { font-size:10px; color:var(--text3); font-weight:600; text-transform:uppercase; letter-spacing:0.8px; }
+  .filter-results { font-size:12px; color:var(--text3); font-family:var(--font-num); }
+  .mat-table-wrap { overflow-x:auto; max-height:60vh; overflow-y:auto; border:1px solid var(--border); border-radius:var(--rad2); }
+  .mat-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .mat-table thead tr { position:sticky; top:0; z-index:10; background:var(--bg3); }
+  .mat-table th { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.8px; padding:9px 12px; border-bottom:1px solid var(--border2); white-space:nowrap; cursor:pointer; user-select:none; }
+  .mat-table th:hover { color:var(--gold); }
+  .mat-table td { padding:7px 12px; border-bottom:1px solid var(--border); font-family:var(--font-num); font-size:12px; color:var(--text); white-space:nowrap; }
+  .mat-table td.desc-cell { font-family:var(--font); color:var(--text2); max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+  .mat-table tr:hover td { background:rgba(255,255,255,0.025); }
+  .mat-table tbody tr:last-child td { border-bottom:none; }
+  .pager { display:flex; align-items:center; gap:8px; margin-top:12px; justify-content:flex-end; }
+  .pager button { background:var(--bg3); border:1px solid var(--border2); color:var(--text2); padding:5px 12px; border-radius:var(--rad); font-size:12px; cursor:pointer; }
+  .pager button:hover { border-color:var(--gold); color:var(--gold); }
+  .pager button:disabled { opacity:.35; cursor:default; pointer-events:none; }
+  .pager .page-info { font-size:12px; color:var(--text3); font-family:var(--font-num); min-width:120px; text-align:center; }
+  .btn-export { padding:6px 14px; border-radius:var(--rad); border:1px solid var(--border2); background:var(--bg4); color:var(--text2); font-family:var(--font); font-size:12px; cursor:pointer; }
+  .btn-export:hover { border-color:var(--gold); color:var(--gold); }
+  .cruce-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--font-num); }
+  .cruce-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  .cruce-kpi { background:var(--bg2); border:1px solid var(--border); border-radius:var(--rad); padding:12px 14px; }
+  .cruce-kpi .ck-label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:.7px; margin-bottom:5px; }
+  .cruce-kpi .ck-value { font-family:var(--font-num); font-size:20px; font-weight:500; }
+
+  /* SCROLL */
+  ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .empty-state { text-align: center; padding: 32px; color: var(--text3); font-size: 13px; }
+  .full-width { grid-column: 1 / -1; }
+  .text-right { text-align: right; }
+  .text-muted { color: var(--text2); }
+  .fw-500 { font-weight: 500; }
+  .gap-8 { display: flex; gap: 8px; }
+
+#ov{position:fixed;inset:0;background:#0d1117;z-index:9999;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:20px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+#ov.hidden{display:none;}
+.spin{width:44px;height:44px;border:3px solid #30363d;border-top-color:#d4a853;
+  border-radius:50%;animation:sp .8s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ov-msg{color:#e6edf3;font-size:15px;text-align:center;max-width:380px;}
+.ov-sub{color:#8b949e;font-size:12px;}
+.role-badge{position:fixed;bottom:0;right:0;background:rgba(13,17,23,.92);
+  border-top:1px solid #30363d;border-left:1px solid #30363d;
+  padding:3px 12px;font-size:11px;color:#8b949e;z-index:100;
+  border-radius:6px 0 0 0;font-family:monospace;}
+</style>
+</head>
+<body>
+
+<div id="ov">
+  <div class="spin"></div>
+  <div class="ov-msg" id="ov-msg">Verificando sesión…</div>
+  <div class="ov-sub" id="ov-sub"></div>
+</div>
+
+<div id="dash-root" style="display:none">
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="title">INVENTARIO ABC</div>
+    <div class="sub">CENTROS 4105 · 4106</div>
+  </div>
+  <div style="padding: 8px; flex: 1; overflow-y: auto;">
+    <div class="nav-section">Análisis</div>
+    <div class="nav-item active" onclick="showPage('resumen', this)">
+      <span class="icon">▦</span> Resumen Ejecutivo
+    </div>
+    <div class="nav-item" data-page="clasificacion" onclick="showPage('clasificacion', this)">
+      <span class="icon">◈</span> Clasificación ABC
+    </div>
+    <div class="nav-item" data-page="tendencia" onclick="showPage('tendencia', this)">
+      <span class="icon">↗</span> Tendencia Mensual
+    </div>
+    <div class="nav-item" data-page="grupos" onclick="showPage('grupos', this)">
+      <span class="icon">≡</span> Grupos de Artículos
+    </div>
+    <div class="nav-item" data-page="centros" onclick="showPage('centros', this)">
+      <span class="icon">⊕</span> Por Centro
+    </div>
+    <div class="nav-section">Cruce & Catálogo</div>
+    <div class="nav-item" data-page="cruce" onclick="showPage('cruce', this)">
+      <span class="icon">⇄</span> Cruce A↔E
+    </div>
+    <div class="nav-item" data-page="catalogo" onclick="showPage('catalogo', this)">
+      <span class="icon">☰</span> Catálogo Materiales
+    </div>
+    <div class="nav-item" data-page="obsoletos" onclick="showPage('obsoletos', this)">
+      <span class="icon">⊘</span> Materiales Obsoletos
+    </div>
+    <div class="nav-section">Seguimiento</div>
+    <div class="nav-item" data-page="semanal" onclick="showPage('semanal', this)">
+      <span class="icon">◻</span> Seguimiento Semanal
+    </div>
+    <div class="nav-item" data-page="comentarios" onclick="showPage('comentarios', this)">
+      <span class="icon">◇</span> Comentarios
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="date-label">Corte:</div>
+    <div>14 Mar 2026</div>
+    <div style="margin-top:4px;">82,906 registros</div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title" id="page-title">Resumen Ejecutivo</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="chip chip-a">4105</span>
+      <span class="chip chip-b">4106</span>
+      <span style="font-size:11px;color:var(--text3);font-family:var(--font-num)">Corte: 14.03.2026</span>
+    </div>
+  </div>
+
+  <!-- ============================= RESUMEN ============================= -->
+  <div class="page-content active" id="page-resumen">
+    <div style="padding-top:4px;"></div>
+    <div class="main-filter-bar" id="mf-resumen">
+      <div class="filter-group">
+        <label>Centro</label>
+        <select id="mf-resumen-centro" onchange="onMainFilterChange()">
+          <option value="">Ambos centros</option>
+          <option value="4105">Centro 4105</option>
+          <option value="4106">Centro 4106</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Almacén</label>
+        <select id="mf-resumen-alm" onchange="onMainFilterChange()">
+          <option value="">Todos los almacenes</option>
+        </select>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:flex-end;">
+        <span class="filter-results" id="mf-resumen-info"></span>
+      </div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card gold">
+        <div class="kpi-label">Valor Total Inventario</div>
+        <div class="kpi-value" id="kpi-valor">$68.9M</div>
+        <div class="kpi-sub" id="kpi-valor-sub">MXN · Ambos centros</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Materiales Únicos</div>
+        <div class="kpi-value" id="kpi-mats">23,954</div>
+        <div class="kpi-sub" id="kpi-mats-sub">34,398 SKU×Centro</div>
+      </div>
+      <div class="kpi-card blue">
+        <div class="kpi-label">Ventas Período</div>
+        <div class="kpi-value" id="kpi-ventas">1.84M</div>
+        <div class="kpi-sub" id="kpi-ventas-sub">Unidades · 12 meses</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-label">Fallas Totales</div>
+        <div class="kpi-value" id="kpi-fallas">320,301</div>
+        <div class="kpi-sub" id="kpi-fallas-sub">Faltantes acumulados</div>
+      </div>
+    </div>
+
+    <div class="info-row">
+      ⚠ Clasificación E representa el 45.8% de materiales pero solo el 0.08% de ventas — $13.2M en inventario de baja rotación. Oportunidad de depuración.
+    </div>
+
+    <div class="grid-2">
+      <!-- ABC Distribution Value -->
+      <div class="panel">
+        <div class="panel-title">Valor por Clasificación</div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-dot" style="background:#3fb950"></span>A — Alta rotación</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span>B — Media-alta</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#ffa657"></span>C — Media</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#f0883e"></span>D — Baja</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#f85149"></span>E — Sin rotación</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#8b949e"></span>N — Nuevo</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chartDonut"></canvas>
+        </div>
+      </div>
+
+      <!-- Materiales por clase -->
+      <div class="panel">
+        <div class="panel-title">Materiales y Ventas por Clase</div>
+        <div class="chart-wrap">
+          <canvas id="chartBarResumen"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick ABC table -->
+    <div class="panel">
+      <div class="panel-title">Indicadores por Clasificación IndAABCCtro</div>
+      <table class="abc-table">
+        <thead>
+          <tr>
+            <th>Clase</th>
+            <th>Definición</th>
+            <th>Materiales</th>
+            <th>% Mats</th>
+            <th>Valor Inventario</th>
+            <th>% Valor</th>
+            <th>Ventas (ud)</th>
+            <th>Fallas</th>
+            <th>Prom 6M</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyResumen"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================= CLASIFICACION ============================= -->
+  <div class="page-content" id="page-clasificacion">
+    <div style="padding-top:4px;"></div>
+    <div class="main-filter-bar" id="mf-clasificacion">
+      <div class="filter-group">
+        <label>Centro</label>
+        <select id="mf-clasificacion-centro" onchange="onMainFilterChange()">
+          <option value="">Ambos centros</option>
+          <option value="4105">Centro 4105</option>
+          <option value="4106">Centro 4106</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Almacén</label>
+        <select id="mf-clasificacion-alm" onchange="onMainFilterChange()">
+          <option value="">Todos los almacenes</option>
+        </select>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:flex-end;">
+        <span class="filter-results" id="mf-clasificacion-info"></span>
+      </div>
+    </div>
+    <div class="info-row">
+      IndAABCCtro = Indicador ABC extendido a nivel Centro. Combina rotación, valor y criticidad del material.
+    </div>
+
+    <div id="cls-cards-container" class="grid-3" style="margin-bottom:16px;"></div>
+
+        <!-- Fallas vs Ventas -->
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-title">Fallas vs Ventas por Clase</div>
+        <div class="chart-wrap">
+          <canvas id="chartFallasVentas"></canvas>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Promedio 6M vs 12M por Clase</div>
+        <div class="chart-wrap">
+          <canvas id="chartPromedios"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= TENDENCIA ============================= -->
+  <div class="page-content" id="page-tendencia">
+    <div style="padding-top:4px;"></div>
+    <div class="main-filter-bar" id="mf-tendencia">
+      <div class="filter-group">
+        <label>Centro</label>
+        <select id="mf-tendencia-centro" onchange="onMainFilterChange()">
+          <option value="">Ambos centros</option>
+          <option value="4105">Centro 4105</option>
+          <option value="4106">Centro 4106</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Almacén</label>
+        <select id="mf-tendencia-alm" onchange="onMainFilterChange()">
+          <option value="">Todos los almacenes</option>
+        </select>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:flex-end;">
+        <span class="filter-results" id="mf-tendencia-info"></span>
+      </div>
+    </div>
+    <div class="info-row">
+      Consumos mensuales por clasificación · Abr 2025 — Mar 2026. Clase A domina el 90%+ del movimiento real.
+    </div>
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-title">Consumos Mensuales — Clase A (Detalle)</div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#3fb950"></span>Clase A</span>
+      </div>
+      <div class="chart-wrap-tall">
+        <canvas id="chartTendenciaA"></canvas>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-title">Tendencia B, C, D</div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span>B</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#ffa657"></span>C</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#f0883e"></span>D</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chartTendenciaBCD"></canvas>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Total Consumo Mensual (todas las clases)</div>
+        <div class="chart-wrap">
+          <canvas id="chartTotalMensual"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= GRUPOS ============================= -->
+  <div class="page-content" id="page-grupos">
+    <div style="padding-top:4px;"></div>
+    <div class="grid-2" style="margin-bottom:16px;align-items:start;">
+      <div class="panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div class="panel-title" style="margin:0">Top 15 — Valor de inventario</div>
+          <button class="btn-export btn-sm" id="grp-clear-btn" onclick="clearGrupoFilter()" style="display:none;">✕ Quitar filtro</button>
+        </div>
+        <div id="grp-selected-label" style="font-size:11px;color:var(--gold);margin-bottom:6px;display:none;"></div>
+        <div style="position:relative;width:100%;height:420px;"><canvas id="chartGrupos"></canvas></div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;text-align:center;">Haz clic en una barra para filtrar el detalle</div>
+      </div>
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom:10px">Resumen — click para filtrar</div>
+        <div style="overflow-x:auto;max-height:460px;overflow-y:auto;">
+          <table class="abc-table">
+            <thead>
+              <tr>
+                <th onclick="sortGrpSum('g')" style="cursor:pointer">Grupo <span id="ssi-g"></span></th>
+                <th onclick="sortGrpSum('mats')" style="cursor:pointer;text-align:right">Mats <span id="ssi-mats"></span></th>
+                <th onclick="sortGrpSum('val')" style="cursor:pointer;text-align:right">Valor <span id="ssi-val"></span></th>
+                <th onclick="sortGrpSum('vta')" style="cursor:pointer;text-align:right">Ventas <span id="ssi-vta"></span></th>
+                <th onclick="sortGrpSum('ratio')" style="cursor:pointer;text-align:right">F/V <span id="ssi-ratio"></span></th>
+              </tr>
+            </thead>
+            <tbody id="grp-sum-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="panel-title" style="margin:0">Detalle de materiales</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="filter-results" id="gd-count"></span>
+          <button class="btn-export btn-sm" onclick="exportGrupoDetail()">↓ CSV</button>
+        </div>
+      </div>
+      <div class="filter-bar" style="margin-bottom:12px;">
+        <div class="filter-group">
+          <label>Grupo</label>
+          <select id="gd-grupo" onchange="onGDGrupoChange()" style="min-width:200px;"></select>
+        </div>
+        <div class="filter-group">
+          <label>Centro</label>
+          <select id="gd-centro" onchange="onGDCentroChange()">
+            <option value="">Ambos</option>
+            <option value="4105">4105</option>
+            <option value="4106">4106</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Almacén</label>
+          <select id="gd-alm" onchange="renderGD()" style="min-width:170px;"></select>
+        </div>
+        <div class="filter-group">
+          <label>Clasificación</label>
+          <select id="gd-cls" onchange="renderGD()">
+            <option value="">Todas</option>
+            <option>A</option><option>B</option><option>C</option>
+            <option>D</option><option>E</option><option>N</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Stock</label>
+          <select id="gd-stock" onchange="renderGD()">
+            <option value="">Todos</option>
+            <option value="1">Con stock</option>
+            <option value="0">Sin stock</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Buscar</label>
+          <input type="text" id="gd-search" placeholder="Código o descripción…" oninput="renderGD()" style="min-width:170px;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;" id="gd-kpis">
+        <div style="background:var(--bg3);border-radius:var(--rad);padding:9px 12px;">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Materiales</div>
+          <div style="font-family:var(--font-num);font-size:17px;font-weight:500;color:var(--gold)" id="gd-k-mats">—</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:var(--rad);padding:9px 12px;">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Stock total</div>
+          <div style="font-family:var(--font-num);font-size:17px;font-weight:500;color:var(--b)" id="gd-k-stk">—</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:var(--rad);padding:9px 12px;">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Ventas</div>
+          <div style="font-family:var(--font-num);font-size:17px;font-weight:500;color:var(--a)" id="gd-k-vta">—</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:var(--rad);padding:9px 12px;">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Fallas</div>
+          <div style="font-family:var(--font-num);font-size:17px;font-weight:500;color:var(--e)" id="gd-k-fal">—</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:var(--rad);padding:9px 12px;">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px">Prom 6M avg</div>
+          <div style="font-family:var(--font-num);font-size:17px;font-weight:500;color:var(--c)" id="gd-k-p6">—</div>
+        </div>
+      </div>
+      <div class="mat-table-wrap">
+        <table class="mat-table">
+          <thead>
+            <tr>
+              <th onclick="sortGD('mat')" style="min-width:130px">Material <span id="si-gd-mat"></span></th>
+              <th onclick="sortGD('desc')" style="min-width:180px">Descripción <span id="si-gd-desc"></span></th>
+              <th onclick="sortGD('grupo')" style="min-width:120px">Grupo <span id="si-gd-grupo"></span></th>
+              <th onclick="sortGD('centro')" style="text-align:center">Centro <span id="si-gd-centro"></span></th>
+              <th onclick="sortGD('cls_c')" style="text-align:center">Cls <span id="si-gd-cls_c"></span></th>
+              <th onclick="sortGD('stk_c')" style="text-align:right">Stock Ctro <span id="si-gd-stk_c"></span></th>
+              <th style="min-width:160px">Almacenes (stock)</th>
+              <th onclick="sortGD('vta')" style="text-align:right">Ventas <span id="si-gd-vta"></span></th>
+              <th onclick="sortGD('fal')" style="text-align:right">Fallas <span id="si-gd-fal"></span></th>
+              <th onclick="sortGD('costo')" style="text-align:right">Costo <span id="si-gd-costo"></span></th>
+              <th onclick="sortGD('p6')" style="text-align:right">P6M <span id="si-gd-p6"></span></th>
+            </tr>
+          </thead>
+          <tbody id="gd-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button onclick="changeGDPage(-1)" id="gd-prev">← Anterior</button>
+        <span class="page-info" id="gd-page-info"></span>
+        <button onclick="changeGDPage(1)" id="gd-next">Siguiente →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= CENTROS ============================= -->
+  <div class="page-content" id="page-centros">
+    <div style="padding-top:4px;"></div>
+    <div class="centro-grid">
+      <!-- 4105 -->
+      <div class="panel">
+        <div class="centro-header">
+          <div class="centro-badge badge-4105">4105</div>
+          <div>
+            <div class="centro-name" style="color:var(--b)">Centro 4105</div>
+            <div style="font-size:11px;color:var(--text3)">Inventario por clasificación</div>
+          </div>
+          <div style="margin-left:auto;text-align:right;">
+            <div style="font-family:var(--font-num);font-size:18px;font-weight:500;">$23.9M</div>
+            <div style="font-size:11px;color:var(--text3);">valor total</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chart4105"></canvas>
+        </div>
+      </div>
+      <!-- 4106 -->
+      <div class="panel">
+        <div class="centro-header">
+          <div class="centro-badge badge-4106">4106</div>
+          <div>
+            <div class="centro-name" style="color:var(--a)">Centro 4106</div>
+            <div style="font-size:11px;color:var(--text3)">Inventario por clasificación</div>
+          </div>
+          <div style="margin-left:auto;text-align:right;">
+            <div style="font-family:var(--font-num);font-size:18px;font-weight:500;">$43.8M</div>
+            <div style="font-size:11px;color:var(--text3);">valor total</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chart4106"></canvas>
+        </div>
+      </div>
+    </div>
+    <!-- Comparativo -->
+    <div class="panel">
+      <div class="panel-title">Comparativo por Clasificación</div>
+      <div class="chart-wrap-tall">
+        <canvas id="chartComparativo"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= SEMANAL ============================= -->
+  <div class="page-content" id="page-semanal">
+    <div style="padding-top:4px;"></div>
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="section-header">
+        <div class="section-title">Registro de Seguimiento</div>
+        <div id="week-count" style="font-size:12px;color:var(--text3);font-family:var(--font-num)">0 semanas</div>
+      </div>
+      <div id="week-list-container">
+        <table class="week-table" id="weekTable">
+          <thead>
+            <tr>
+              <th style="width:110px">Semana</th>
+              <th style="width:90px">Período</th>
+              <th>Acción / Hallazgo</th>
+              <th style="width:90px">Clase</th>
+              <th style="width:80px">Estado</th>
+              <th style="width:90px">Responsable</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="weekBody"></tbody>
+        </table>
+        <div id="week-empty" class="empty-state" style="display:none;">
+          No hay seguimientos registrados. Agrega el primero abajo.
+        </div>
+      </div>
+    </div>
+
+    <!-- Formulario agregar semana -->
+    <div class="add-week-form">
+      <div class="add-week-title">+ Nueva Entrada de Seguimiento</div>
+      <div class="form-row form-row-3">
+        <div>
+          <label class="form-label">Semana</label>
+          <input type="text" id="sw-semana" placeholder="Sem 12 — 2026" style="width:100%">
+        </div>
+        <div>
+          <label class="form-label">Período</label>
+          <input type="text" id="sw-periodo" placeholder="09–15 Mar" style="width:100%">
+        </div>
+        <div>
+          <label class="form-label">Responsable</label>
+          <input type="text" id="sw-resp" placeholder="Nombre" style="width:100%">
+        </div>
+      </div>
+      <div class="form-row form-row-2">
+        <div>
+          <label class="form-label">Clasificación</label>
+          <select id="sw-clase" style="width:100%">
+            <option value="Todos">Todos</option>
+            <option value="A">A — Alta rotación</option>
+            <option value="B">B — Media-alta</option>
+            <option value="C">C — Media</option>
+            <option value="D">D — Baja rotación</option>
+            <option value="E">E — Sin rotación</option>
+            <option value="N">N — Nuevo</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Estado</label>
+          <select id="sw-status" style="width:100%">
+            <option value="open">En proceso</option>
+            <option value="done">Completado</option>
+            <option value="risk">En riesgo</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label class="form-label">Acción / Hallazgo</label>
+        <textarea id="sw-accion" placeholder="Describe el hallazgo, acción tomada o punto de seguimiento..."></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button class="btn btn-primary" onclick="addWeekEntry()">Registrar entrada</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= COMENTARIOS ============================= -->
+  <div class="page-content" id="page-comentarios">
+    <div style="padding-top:4px;"></div>
+    <div class="grid-2" style="align-items:start;">
+      <!-- Lista de comentarios -->
+      <div>
+        <div class="section-header">
+          <div class="section-title">Comentarios</div>
+          <div id="comment-count" style="font-size:12px;color:var(--text3);font-family:var(--font-num)">0 comentarios</div>
+        </div>
+        <div id="comments-list">
+          <div class="empty-state" id="comments-empty">No hay comentarios. Sé el primero en agregar uno.</div>
+        </div>
+      </div>
+
+      <!-- Formulario nuevo comentario -->
+      <div class="panel" style="position:sticky;top:68px;">
+        <div class="panel-title">Nuevo Comentario</div>
+        <div style="margin-bottom:10px;">
+          <label class="form-label">Autor</label>
+          <input type="text" id="c-author" placeholder="Tu nombre" style="width:100%">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label class="form-label">Etiqueta</label>
+          <select id="c-tag" style="width:100%">
+            <option value="alerta">⚠ Alerta</option>
+            <option value="accion">→ Acción requerida</option>
+            <option value="ok">✓ OK / Cerrado</option>
+            <option value="info">ℹ Información</option>
+            <option value="revision">⟳ A revisar</option>
+          </select>
+        </div>
+        <div style="margin-bottom:10px;">
+          <label class="form-label">Clase relacionada</label>
+          <select id="c-clase" style="width:100%">
+            <option value="">General</option>
+            <option value="A">A</option><option value="B">B</option>
+            <option value="C">C</option><option value="D">D</option>
+            <option value="E">E</option><option value="N">N</option>
+          </select>
+        </div>
+        <div style="margin-bottom:14px;">
+          <label class="form-label">Comentario</label>
+          <textarea id="c-text" placeholder="Observación, nota o punto de atención sobre el inventario..."></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="addComment()" style="width:100%">Agregar comentario</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================= CRUCE ABC ============================= -->
+  <div class="page-content" id="page-cruce">
+    <div style="padding-top:4px;"></div>
+    <div class="cruce-kpi-grid">
+      <div class="cruce-kpi">
+        <div class="ck-label">Total Cruces</div>
+        <div class="ck-value" style="color:var(--gold)" id="ck-total">865</div>
+        <div class="ck-sub" id="ck-total-val">—</div>
+      </div>
+      <div class="cruce-kpi">
+        <div class="ck-label">D/E en 4105 → A/B en 4106</div>
+        <div class="ck-value" style="color:var(--a)" id="ck-5low">354</div>
+        <div class="ck-sub" id="ck-5low-val">—</div>
+      </div>
+      <div class="cruce-kpi">
+        <div class="ck-label">D/E en 4106 → A/B en 4105</div>
+        <div class="ck-value" style="color:var(--b)" id="ck-6low">511</div>
+        <div class="ck-sub" id="ck-6low-val">—</div>
+      </div>
+      <div class="cruce-kpi">
+        <div class="ck-label">Con stock ≥ 1 en centro bajo</div>
+        <div class="ck-value" style="color:var(--e)" id="ck-stock-risk">—</div>
+        <div class="ck-sub" id="ck-stock-risk-val">—</div>
+      </div>
+    </div>
+    <div class="info-row">
+      Materiales con clasificación D o E en un centro y A o B en el otro — indica desequilibrio de distribución o diferencia de demanda entre ubicaciones.
+    </div>
+    <div class="panel">
+      <div class="filter-bar">
+        <div class="filter-group">
+          <label>Grupo de artículo</label>
+          <select id="cruce-grupo" onchange="renderCruce()">
+            <option value="">Todos los grupos</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Dirección del cruce</label>
+          <select id="cruce-dir" onchange="renderCruce()">
+            <option value="">Todas</option>
+            <option value="5low">D/E en 4105 → A/B en 4106</option>
+            <option value="6low">D/E en 4106 → A/B en 4105</option>
+            <option value="DE_A">Clase E → Clase A (máx. diferencia)</option>
+            <option value="DE_B">Clase E → Clase B</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Buscar material</label>
+          <input type="text" id="cruce-search" placeholder="Código o descripción…" oninput="renderCruce()" style="min-width:200px;">
+        </div>
+        <div style="margin-left:auto; display:flex; align-items:flex-end; gap:8px;">
+          <span class="filter-results" id="cruce-count"></span>
+          <button class="btn-export" onclick="exportCSV('cruce')">↓ Exportar CSV</button>
+        </div>
+      </div>
+      <div class="mat-table-wrap">
+        <table class="mat-table">
+          <thead>
+            <tr>
+              <th onclick="sortCruce('mat')">Material <span class="sort-indicator" id="si-cruce-mat"></span></th>
+              <th onclick="sortCruce('desc')" style="min-width:200px">Descripción</th>
+              <th onclick="sortCruce('grupo')">Grupo</th>
+              <th onclick="sortCruce('cls5')" style="text-align:center">4105</th>
+              <th onclick="sortCruce('cls6')" style="text-align:center">4106</th>
+              <th onclick="sortCruce('stk5')" style="text-align:right">Stock 4105</th>
+              <th onclick="sortCruce('stk6')" style="text-align:right">Stock 4106</th>
+              <th onclick="sortCruce('vta5')" style="text-align:right">Vtas 4105</th>
+              <th onclick="sortCruce('vta6')" style="text-align:right">Vtas 4106</th>
+              <th onclick="sortCruce('costo')" style="text-align:right">Costo Unit</th>
+              <th onclick="sortCruce('prom6')" style="text-align:right">Prom 6M</th>
+            </tr>
+          </thead>
+          <tbody id="cruce-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button onclick="changePage('cruce',-1)" id="cruce-prev">← Anterior</button>
+        <span class="page-info" id="cruce-page-info"></span>
+        <button onclick="changePage('cruce',1)" id="cruce-next">Siguiente →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= CATALOGO ============================= -->
+  <div class="page-content" id="page-catalogo">
+    <div style="padding-top:4px;"></div>
+    <div class="panel">
+      <div class="filter-bar">
+        <div class="filter-group">
+          <label>Grupo de artículo</label>
+          <select id="cat-grupo" onchange="renderCatalogo()">
+            <option value="">Todos los grupos</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Clase 4105</label>
+          <select id="cat-cls5" onchange="renderCatalogo()">
+            <option value="">Todas</option>
+            <option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>N</option><option>—</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Clase 4106</label>
+          <select id="cat-cls6" onchange="renderCatalogo()">
+            <option value="">Todas</option>
+            <option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>N</option><option>—</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Solo cruces D/E↔A/B</label>
+          <select id="cat-cruce" onchange="renderCatalogo()">
+            <option value="">No filtrar</option>
+            <option value="yes">Solo materiales con cruce</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Buscar</label>
+          <input type="text" id="cat-search" placeholder="Código, descripción, proveedor…" oninput="renderCatalogo()" style="min-width:220px;">
+        </div>
+        <div style="margin-left:auto; display:flex; align-items:flex-end; gap:8px;">
+          <span class="filter-results" id="cat-count"></span>
+          <button class="btn-export" onclick="exportCSV('cat')">↓ Exportar CSV</button>
+        </div>
+      </div>
+
+      <div class="mat-table-wrap">
+        <table class="mat-table">
+          <thead>
+            <tr>
+              <th onclick="sortCat('mat')">Material <span class="sort-indicator" id="si-cat-mat"></span></th>
+              <th style="min-width:200px" onclick="sortCat('desc')">Descripción</th>
+              <th onclick="sortCat('grupo')">Grupo</th>
+              <th onclick="sortCat('cls5')" style="text-align:center">Cls 4105</th>
+              <th onclick="sortCat('cls6')" style="text-align:center">Cls 4106</th>
+              <th onclick="sortCat('stk5')" style="text-align:right">Stock 4105</th>
+              <th onclick="sortCat('stk6')" style="text-align:right">Stock 4106</th>
+              <th onclick="sortCat('vta5')" style="text-align:right">Vtas 4105</th>
+              <th onclick="sortCat('vta6')" style="text-align:right">Vtas 4106</th>
+              <th onclick="sortCat('costo')" style="text-align:right">Costo Unit</th>
+              <th onclick="sortCat('valor')" style="text-align:right">Valor Inv</th>
+              <th onclick="sortCat('prom6')" style="text-align:right">Prom 6M</th>
+              <th onclick="sortCat('proveedor')">Proveedor</th>
+            </tr>
+          </thead>
+          <tbody id="cat-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button onclick="changePage('cat',-1)" id="cat-prev">← Anterior</button>
+        <span class="page-info" id="cat-page-info"></span>
+        <button onclick="changePage('cat',1)" id="cat-next">Siguiente →</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================= OBSOLETOS ============================= -->
+  <div class="page-content" id="page-obsoletos">
+    <div style="padding-top:4px;"></div>
+
+    <!-- KPI STRIP -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;">
+      <div class="kpi-card" style="border-top:2px solid #f85149;">
+        <div class="kpi-label">Total Obsoletos</div>
+        <div class="kpi-value" style="color:#f85149" id="ob-k-total">27,361</div>
+        <div class="kpi-sub">Materiales D+E</div>
+      </div>
+      <div class="kpi-card" style="border-top:2px solid #f0883e;">
+        <div class="kpi-label">Clase D</div>
+        <div class="kpi-value" style="color:#f0883e" id="ob-k-d">7,856</div>
+        <div class="kpi-sub">Baja rotación</div>
+      </div>
+      <div class="kpi-card" style="border-top:2px solid #f85149;">
+        <div class="kpi-label">Clase E</div>
+        <div class="kpi-value" style="color:#f85149" id="ob-k-e">19,505</div>
+        <div class="kpi-sub">Sin rotación</div>
+      </div>
+      <div class="kpi-card" style="border-top:2px solid #d4a853;">
+        <div class="kpi-label">Con Stock Físico</div>
+        <div class="kpi-value" style="color:#d4a853" id="ob-k-stk">4,217</div>
+        <div class="kpi-sub">Materiales con inventario</div>
+      </div>
+      <div class="kpi-card" style="border-top:2px solid #58a6ff;">
+        <div class="kpi-label">Valor Inmovilizado</div>
+        <div class="kpi-value" style="color:#58a6ff;font-size:20px;" id="ob-k-val">$25.5M</div>
+        <div class="kpi-sub">Stock × Costo unitario</div>
+      </div>
+    </div>
+
+    <!-- CHARTS -->
+    <div class="grid-2" style="margin-bottom:16px;">
+      <div class="panel">
+        <div class="panel-title">Top 10 Grupos — Valor Inmovilizado</div>
+        <div style="position:relative;width:100%;height:300px;"><canvas id="ob-chart-grupos"></canvas></div>
+      </div>
+      <div class="panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+          <div class="panel-title" style="margin:0">Distribución por almacén</div>
+          <button class="btn-export btn-sm" id="ob-alm-clear" onclick="obClearAlmFilter()" style="display:none;font-size:11px;">✕ Quitar filtro</button>
+        </div>
+        <div id="ob-alm-active-label" style="font-size:11px;color:var(--gold);margin-bottom:6px;min-height:16px;"></div>
+        <div style="position:relative;width:100%;height:280px;"><canvas id="ob-chart-alm"></canvas></div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;text-align:center;">Haz clic en una barra para filtrar por almacén</div>
+      </div>
+    </div>
+
+    <!-- DETAIL TABLE -->
+    <div class="panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="panel-title" style="margin:0">Detalle — Materiales Obsoletos D+E</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="filter-results" id="ob-count"></span>
+          <button class="btn-export" onclick="exportObsoletos()">↓ Exportar CSV</button>
+        </div>
+      </div>
+      <div class="filter-bar" style="margin-bottom:12px;">
+        <div class="filter-group">
+          <label>Clasificación</label>
+          <select id="ob-cls" onchange="renderObs()">
+            <option value="">D y E</option>
+            <option value="D">Solo D</option>
+            <option value="E">Solo E</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Centro</label>
+          <select id="ob-centro" onchange="obPopulateAlm();renderObs();">
+            <option value="">Ambos</option>
+            <option value="4105">4105</option>
+            <option value="4106">4106</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Almacén</label>
+          <select id="ob-alm" onchange="obHighlightAlmChart();renderObs();" style="min-width:170px;"></select>
+        </div>
+        <div class="filter-group">
+          <label>Grupo de artículo</label>
+          <select id="ob-grupo" onchange="obPage=1;renderObs();obHighlightChart();" style="min-width:180px;"></select>
+        </div>
+        <div class="filter-group">
+          <label>Stock</label>
+          <select id="ob-stock" onchange="renderObs()">
+            <option value="">Todos</option>
+            <option value="1">Con stock</option>
+            <option value="0">Sin stock</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Buscar</label>
+          <input type="text" id="ob-search" placeholder="Código o descripción…" oninput="renderObs()" style="min-width:160px;">
+        </div>
+      </div>
+      <div class="mat-table-wrap">
+        <table class="mat-table">
+          <thead>
+            <tr>
+              <th onclick="sortObs('mat')" style="min-width:130px">Material <span id="si-ob-mat"></span></th>
+              <th onclick="sortObs('desc')" style="min-width:190px">Descripción <span id="si-ob-desc"></span></th>
+              <th onclick="sortObs('grupo')" style="min-width:120px">Grupo <span id="si-ob-grupo"></span></th>
+              <th onclick="sortObs('centro')" style="text-align:center">Centro <span id="si-ob-centro"></span></th>
+              <th onclick="sortObs('cls_c')" style="text-align:center">Cls <span id="si-ob-cls_c"></span></th>
+              <th onclick="sortObs('stk_c')" style="text-align:right">Stock <span id="si-ob-stk_c"></span></th>
+              <th onclick="sortObs('val_inm')" style="text-align:right">Valor Inmov. <span id="si-ob-val_inm"></span></th>
+              <th style="min-width:150px">Almacenes</th>
+              <th onclick="sortObs('vta')" style="text-align:right">Ventas <span id="si-ob-vta"></span></th>
+              <th onclick="sortObs('fal')" style="text-align:right">Fallas <span id="si-ob-fal"></span></th>
+              <th onclick="sortObs('p6')" style="text-align:right">P6M <span id="si-ob-p6"></span></th>
+              <th onclick="sortObs('costo')" style="text-align:right">Costo <span id="si-ob-costo"></span></th>
+            </tr>
+          </thead>
+          <tbody id="ob-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button onclick="changeObPage(-1)" id="ob-prev">← Anterior</button>
+        <span class="page-info" id="ob-page-info"></span>
+        <button onclick="changeObPage(1)" id="ob-next">Siguiente →</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+</div>
+
+<script>
+const SUPA_URL = 'https://wxcoblbhhgxlnfoinfij.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4Y29ibGJoaGd4bG5mb2luZmlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTg1NDIsImV4cCI6MjA4OTI3NDU0Mn0.tMZilzOV8dxd_jvrnA5gq94kzFavv3WdaE8y8BdRazc';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY, {
+  auth: { persistSession: true, storageKey: 'inv-auth', storage: window.localStorage }
+});
+
+const NAV_BY_ROLE = {
+  admin:    ['resumen','clasificacion','tendencia','grupos','centros','cruce','catalogo','obsoletos','semanal','comentarios'],
+  gerente:  ['resumen','clasificacion','tendencia','grupos','centros','cruce','catalogo','obsoletos','semanal','comentarios'],
+  vendedor: ['catalogo','obsoletos','semanal','comentarios'],
+};
+
+function ovMsg(m, s) {
+  document.getElementById('ov-msg').textContent = m;
+  if (s !== undefined) document.getElementById('ov-sub').textContent = s || '';
+}
+
+async function bootstrap(session) {
+  ovMsg('Cargando perfil…');
+  const { data: profile } = await sb.from('profiles')
+    .select('id,email,nombre,rol,activo').eq('id', session.user.id).single();
+
+  if (!profile || !profile.activo) {
+    await sb.auth.signOut(); window.location.href = 'login.html'; return;
+  }
+
+  const allowedPages = NAV_BY_ROLE[profile.rol] || NAV_BY_ROLE.vendedor;
+
+  ovMsg('Buscando datos…');
+  const { data: snap } = await sb.from('dashboard_snapshots')
+    .select('storage_path,processed_at,row_count,summary')
+    .eq('is_active', true).order('processed_at', {ascending:false}).limit(1).single();
+
+  if (!snap) {
+    document.getElementById('ov').innerHTML = `
+      <div style="font-size:48px">📭</div>
+      <div class="ov-msg">No hay datos cargados todavía.</div>
+      ${profile.rol==='admin' ? '<a href="upload.html" style="padding:10px 24px;background:#d4a853;border-radius:8px;font-weight:700;color:#0d1117;text-decoration:none;margin-top:8px;">📤 Cargar archivos SAP</a>' : '<div class="ov-sub">Contacta al administrador.</div>'}
+      <a href="#" onclick="sb.auth.signOut().then(()=>location.href=\'login.html\')" style="font-size:13px;color:#8b949e;margin-top:12px;">Cerrar sesión</a>
+    `;
+    return;
+  }
+
+  ovMsg('Descargando datos…',
+    snap.row_count ? snap.row_count.toLocaleString('es-MX')+' SKUs · $'+((snap.summary?.valor_total||0)/1e6).toFixed(1)+'M MXN' : '');
+
+  const { data: su, error: suErr } = await sb.storage
+    .from('dashboard-data').createSignedUrl(snap.storage_path, 3600);
+  if (suErr) { ovMsg('Error al acceder a los datos: '+suErr.message); return; }
+
+  const resp = await fetch(su.signedUrl);
+  if (!resp.ok) { ovMsg('Error descargando datos ('+resp.status+')'); return; }
+
+  ovMsg('Construyendo dashboard…');
+  const d = await resp.json();
+
+  // Inject data as globals
+  window.DATA        = d.DATA;
+  window.FILTER_DATA = d.FILTER_DATA;
+  window.MDATA       = { materials: d.MAT_ALL, grupos: d.GDATA.grupos };
+  window.GDATA       = d.GDATA;
+
+  // Show dashboard
+  document.getElementById('dash-root').style.display = 'block';
+
+  // Role-based nav
+  document.querySelectorAll('[data-page]').forEach(el => {
+    if (!allowedPages.includes(el.getAttribute('data-page'))) el.style.display = 'none';
+  });
+
+  // Admin links
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) {
+    if (profile.rol === 'admin') {
+      sidebar.insertAdjacentHTML('beforeend',
+        '<div style="border-top:1px solid rgba(255,255,255,.07);padding-top:8px;margin-top:4px;">' +
+        '<a href="upload.html" style="text-decoration:none;"><div class="nav-item" style="color:#d4a853;">📤 Cargar archivos SAP</div></a></div>');
+    }
+    sidebar.insertAdjacentHTML('beforeend',
+      '<div id="btn-out" class="nav-item" style="color:#8b949e;cursor:pointer;border-top:1px solid rgba(255,255,255,.05);margin-top:4px;">← Cerrar sesión</div>');
+    document.getElementById('btn-out').onclick = async () => {
+      await sb.auth.signOut(); window.location.href = 'login.html';
+    };
+  }
+
+  // Role badge
+  const pd = new Date(snap.processed_at).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'});
+  const rc = {admin:'#f85149',gerente:'#58a6ff',vendedor:'#3fb950'}[profile.rol]||'#8b949e';
+  document.body.insertAdjacentHTML('beforeend',
+    `<div class="role-badge">Corte: ${pd} &nbsp;·&nbsp; ${(snap.row_count||0).toLocaleString('es-MX')} SKUs` +
+    ` &nbsp;·&nbsp; <span style="color:${rc}">${profile.nombre||profile.email} (${profile.rol})</span></div>`);
+
+  // Hide overlay and init dashboard
+  document.getElementById('ov').classList.add('hidden');
+
+  buildResumenTable();
+  buildGruposTable();
+  initCharts();
+  renderWeeks();
+  renderComments();
+  populateGrupoDropdowns();
+  initMainFilters();
+  window.cruceFiltered = window.MAT_ALL ? window.MAT_ALL.filter(m=>m.cruce) : [];
+  window.catFiltered   = window.MAT_ALL ? [...window.MAT_ALL] : [];
+  gdInit();
+
+  const first = allowedPages[0];
+  const firstEl = document.querySelector('[data-page="'+first+'"]');
+  if (firstEl && window.showPage) window.showPage(first, firstEl);
+}
+
+// Retry getSession up to 3 times to handle localStorage restore timing
+async function getSessionWithRetry(retries=3, delay=400) {
+  for (let i=0; i<retries; i++) {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) return session;
+    if (i < retries-1) await new Promise(r => setTimeout(r, delay));
+  }
+  return null;
+}
+
+(async () => {
+  const session = await getSessionWithRetry();
+  if (!session) { window.location.href = 'login.html'; return; }
+  bootstrap(session).catch(err => { ovMsg('Error: '+err.message); console.error(err); });
+})();
+</script>
+
+<!-- Dashboard JS logic -->
+<script>
+
+const CLASSES = ['A','B','C','D','E','N'];
+const COLORS = { A:'#3fb950', B:'#58a6ff', C:'#ffa657', D:'#f0883e', E:'#f85149', N:'#8b949e' };
+const COLORS_BG = { A:'rgba(63,185,80,0.15)', B:'rgba(88,166,255,0.15)', C:'rgba(255,166,87,0.15)', D:'rgba(248,136,62,0.15)', E:'rgba(248,81,73,0.15)', N:'rgba(139,148,158,0.15)' };
+const fmt = v => '$' + (v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v.toFixed(0));
+const fmtN = v => v.toLocaleString('es-MX');
+
+/* ---- NAVIGATION ---- */
+function showPage(id, el) {
+  document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  el.classList.add('active');
+  const titles = {resumen:'Resumen Ejecutivo',clasificacion:'Clasificación ABC',tendencia:'Tendencia Mensual',grupos:'Grupos de Artículos',centros:'Por Centro',cruce:'Cruce A↔E',catalogo:'Catálogo Materiales',obsoletos:'Materiales Obsoletos',semanal:'Seguimiento Semanal',comentarios:'Comentarios'};
+  document.getElementById('page-title').textContent = titles[id] || id;
+  if (id === 'obsoletos' && !window._obInited) { window._obInited = true; obInit(); }
+}
+
+/* ---- RESUMEN TABLE ---- */
+
+/* ============================================================
+   MAIN FILTERS (Centro + Almacén) for Resumen/Clasificacion/Tendencia
+   ============================================================ */
+
+var _mfCentro = '';
+var _mfAlm = '';
+
+// Compute aggregated DATA-like object filtered by centro / almacen
+function getFilteredData(centro, alm) {
+  var cls = ['A','B','C','D','E','N'];
+  var months = ['C(04.2025)','C(05.2025)','C(06.2025)','C(07.2025)','C(08.2025)',
+                'C(09.2025)','C(10.2025)','C(11.2025)','C(12.2025)',
+                'C(01.2026)','C(02.2026)','C(03.2026)'];
+
+  // Start from MAT_ALL for valor/mats/costo counts,
+  // and GDATA.rows for stock/ventas/fallas/monthly per centro/alm
+  var rows = GDATA.rows;
+
+  // Filter rows
+  if (centro) rows = rows.filter(function(r){ return r.centro === centro; });
+  if (alm) rows = rows.filter(function(r){
+    return r.alms && r.alms.some(function(a){ return a.a === alm; });
+  });
+
+  // Aggregate per clase
+  var agg = {};
+  cls.forEach(function(c){
+    agg[c] = { c:c, mats:0, valor:0, stock:0, ventas:0, fallas:0, p6:0, p12:0, _p6cnt:0 };
+  });
+
+  // Use MAT_ALL filtered to matching materials for valor
+  var matSet = new Set(rows.map(function(r){ return r.mat; }));
+  var matRows = MAT_ALL.filter(function(m){ return matSet.has(m.mat); });
+
+  // valor from MAT_ALL (costo * stk) - per centro
+  if (centro === '4105') {
+    matRows.forEach(function(m){
+      var c = m.cls5;
+      if (agg[c]) agg[c].valor += m.stk5 * m.costo;
+    });
+  } else if (centro === '4106') {
+    matRows.forEach(function(m){
+      var c = m.cls6;
+      if (agg[c]) agg[c].valor += m.stk6 * m.costo;
+    });
+  } else {
+    // both centros: sum stk5+stk6, classify by... use row cls_c per centro row
+    rows.forEach(function(r){
+      var c = r.cls_c;
+      if (!agg[c]) return;
+      agg[c].valor += r.stk_c * r.costo;
+    });
+  }
+
+  // mats, ventas, fallas, p6, p12 from rows
+  rows.forEach(function(r){
+    var c = r.cls_c;
+    if (!agg[c]) return;
+    agg[c].ventas += r.vta;
+    agg[c].fallas += r.fal;
+    agg[c]._p6cnt++;
+    agg[c].p6 += r.p6;
+    agg[c].p12 += r.p12;
+  });
+
+  // count unique mats per class
+  var matByCls = {};
+  cls.forEach(function(c){ matByCls[c] = new Set(); });
+  rows.forEach(function(r){ if (matByCls[r.cls_c]) matByCls[r.cls_c].add(r.mat); });
+  cls.forEach(function(c){ agg[c].mats = matByCls[c].size; });
+
+  // p6/p12 average
+  cls.forEach(function(c){
+    var n = agg[c]._p6cnt || 1;
+    agg[c].p6 = parseFloat((agg[c].p6 / n).toFixed(1));
+    agg[c].p12 = parseFloat((agg[c].p12 / n).toFixed(1));
+  });
+
+  // Monthly consumption — from FILTER_DATA
+  var monthly = {};
+  if (alm) {
+    // per-almacen monthly not precomputed, fall back to centro
+    var src = centro ? FILTER_DATA.monthly[centro] : null;
+    if (src) { monthly = src; }
+    else {
+      monthly = {};
+      cls.forEach(function(c){
+        monthly[c] = FILTER_DATA.monthly['4105'][c].map(function(v,i){ return v + FILTER_DATA.monthly['4106'][c][i]; });
+      });
+    }
+  } else if (centro) {
+    monthly = FILTER_DATA.monthly[centro];
+  } else {
+    monthly = {};
+    cls.forEach(function(c){
+      monthly[c] = FILTER_DATA.monthly['4105'][c].map(function(v,i){ return v + FILTER_DATA.monthly['4106'][c][i]; });
+    });
+  }
+
+  return { cls: cls.map(function(c){ return agg[c]; }), monthly: monthly };
+}
+
+function onMainFilterChange() {
+  var pageId = document.querySelector('.page-content.active').id.replace('page-','');
+  var fid = 'mf-' + pageId;
+  var centroEl = document.getElementById(fid + '-centro');
+  var almEl = document.getElementById(fid + '-alm');
+  if (!centroEl) return;
+
+  // sync centro/alm across all three filter bars
+  _mfCentro = centroEl.value;
+  // rebuild alm dropdown then sync alm
+  rebuildAlmDropdown(fid, _mfCentro);
+  // propagate to other pages
+  ['resumen','clasificacion','tendencia'].forEach(function(p){
+    var cEl = document.getElementById('mf-'+p+'-centro');
+    var aEl = document.getElementById('mf-'+p+'-alm');
+    if (cEl && cEl !== centroEl) cEl.value = _mfCentro;
+    if (aEl) rebuildAlmDropdown('mf-'+p, _mfCentro);
+  });
+
+  _mfAlm = almEl.value;
+  ['resumen','clasificacion','tendencia'].forEach(function(p){
+    var aEl = document.getElementById('mf-'+p+'-alm');
+    if (aEl) aEl.value = _mfAlm;
+  });
+
+  applyMainFilters();
+}
+
+function rebuildAlmDropdown(fid, centro) {
+  var el = document.getElementById(fid + '-alm');
+  if (!el) return;
+  var cur = el.value;
+  var alms = centro ? (FILTER_DATA.almacenes[centro] || []) : [];
+  if (!centro) {
+    // merge both, sorted by code
+    var all = (FILTER_DATA.almacenes['4105'] || []).concat(FILTER_DATA.almacenes['4106'] || []);
+    alms = all;
+  }
+  el.innerHTML = '<option value="">Todos los almacenes</option>';
+  alms.forEach(function(a){
+    var opt = document.createElement('option');
+    opt.value = a.a;
+    opt.textContent = a.a + ' — ' + a.n;
+    el.appendChild(opt);
+  });
+  // restore selection if still valid
+  if (cur && el.querySelector('option[value="'+cur+'"]')) el.value = cur;
+}
+
+function applyMainFilters() {
+  var fd = getFilteredData(_mfCentro, _mfAlm);
+  var cls = fd.cls;
+  var monthly = fd.monthly;
+  var months = DATA.months;
+
+  var totalVal  = cls.reduce(function(s,d){ return s+d.valor; }, 0);
+  var totalMats = cls.reduce(function(s,d){ return s+d.mats; }, 0);
+  var totalVtas = cls.reduce(function(s,d){ return s+d.ventas; }, 0);
+  var totalFal  = cls.reduce(function(s,d){ return s+d.fallas; }, 0);
+
+  // ── Resumen KPIs ──
+  var kv = document.getElementById('kpi-valor');
+  if (kv) {
+    kv.textContent = fmt(totalVal);
+    document.getElementById('kpi-valor-sub').textContent = 'MXN · ' + (_mfCentro ? 'Centro ' + _mfCentro : 'Ambos centros') + (_mfAlm ? ' · Almacén ' + _mfAlm : '');
+    document.getElementById('kpi-mats').textContent = fmtN(totalMats);
+    document.getElementById('kpi-mats-sub').textContent = (_mfCentro ? 'Centro ' + _mfCentro : 'Ambos centros') + (_mfAlm ? ' · Alm ' + _mfAlm : '');
+    document.getElementById('kpi-ventas').textContent = totalVtas >= 1e6 ? (totalVtas/1e6).toFixed(2)+'M' : fmtN(totalVtas);
+    document.getElementById('kpi-fallas').textContent = fmtN(totalFal);
+  }
+
+  // ── Resumen charts ──
+  if (window._chartDonut) {
+    window._chartDonut.data.datasets[0].data = cls.map(function(d){ return d.valor; });
+    window._chartDonut.update();
+  }
+  if (window._chartBarResumen) {
+    window._chartBarResumen.data.datasets[0].data = cls.map(function(d){ return d.mats; });
+    window._chartBarResumen.data.datasets[1].data = cls.map(function(d){ return d.ventas/1000; });
+    window._chartBarResumen.update();
+  }
+
+  // ── Resumen table ──
+  var tbody = document.getElementById('tbodyResumen');
+  if (tbody) {
+    var defs = {A:'Alta rotación',B:'Media-alta',C:'Rotación media',D:'Baja rotación',E:'Sin rotación',N:'Sin clasif.'};
+    tbody.innerHTML = cls.map(function(d){
+      var pMats = totalMats > 0 ? (d.mats/totalMats*100).toFixed(1) : '0.0';
+      var pVal  = totalVal  > 0 ? (d.valor/totalVal*100).toFixed(1)  : '0.0';
+      var barW  = totalVal  > 0 ? Math.round(d.valor/totalVal*120) : 0;
+      return '<tr><td><span class="chip chip-'+d.c.toLowerCase()+'">'+d.c+'</span></td>'
+        +'<td style="color:var(--text2);font-family:var(--font)">'+defs[d.c]+'</td>'
+        +'<td>'+fmtN(d.mats)+'</td>'
+        +'<td style="color:var(--text2)">'+pMats+'%</td>'
+        +'<td><div class="bar-cell"><div class="mini-bar" style="width:'+barW+'px;background:'+COLORS[d.c]+';opacity:0.7;"></div>'+fmt(d.valor)+'</div></td>'
+        +'<td style="color:var(--text2)">'+pVal+'%</td>'
+        +'<td>'+fmtN(d.ventas)+'</td>'
+        +'<td style="color:'+(d.fallas>50000?'#f85149':'var(--text)')+'">'+fmtN(d.fallas)+'</td>'
+        +'<td>'+d.p6.toFixed(1)+'</td>'
+        +'</tr>';
+    }).join('');
+  }
+
+  // ── Clasificacion cards ──
+  var container = document.getElementById('cls-cards-container');
+  if (container) {
+    var clsDefs = {A:'Alta rotación',B:'Media-alta rotación',C:'Rotación media',D:'Baja rotación',E:'Sin rotación',N:'Sin clasificación'};
+    var clsColors = COLORS;
+    container.innerHTML = cls.map(function(d){
+      var pVal = totalVal > 0 ? (d.valor/totalVal*100).toFixed(1) : '0.0';
+      return '<div class="panel">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+        +'<span class="chip chip-'+d.c.toLowerCase()+'">CLASE '+d.c+'</span>'
+        +'<span style="font-size:11px;color:var(--text3)">'+clsDefs[d.c]+'</span>'
+        +'</div>'
+        +'<div style="font-family:var(--font-num);font-size:24px;font-weight:500;color:'+clsColors[d.c]+'">'+(d.valor>=1e6?(d.valor/1e6).toFixed(1)+'M':'$'+Math.round(d.valor).toLocaleString('es-MX'))+'</div>'
+        +'<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+fmtN(d.mats)+' materiales · '+pVal+'% valor</div>'
+        +'<div style="margin-top:10px;" class="prog-wrap"><div class="prog-fill" style="width:'+pVal+'%;background:'+clsColors[d.c]+';"></div></div>'
+        +'<div style="margin-top:10px;font-size:12px;color:var(--text2);">'+fmtN(d.ventas)+' unidades vendidas</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  // ── Clasificacion charts ──
+  if (window._chartFallasVentas) {
+    window._chartFallasVentas.data.datasets[0].data = cls.map(function(d){ return d.ventas; });
+    window._chartFallasVentas.data.datasets[1].data = cls.map(function(d){ return d.fallas; });
+    window._chartFallasVentas.update();
+  }
+  if (window._chartPromedios) {
+    window._chartPromedios.data.datasets[0].data = cls.map(function(d){ return d.p6; });
+    window._chartPromedios.data.datasets[1].data = cls.map(function(d){ return d.p12; });
+    window._chartPromedios.update();
+  }
+
+  // ── Tendencia charts ──
+  if (window._chartTendA) {
+    window._chartTendA.data.datasets[0].data = monthly['A'] || [];
+    window._chartTendA.update();
+  }
+  if (window._chartTendBCD) {
+    window._chartTendBCD.data.datasets[0].data = monthly['B'] || [];
+    window._chartTendBCD.data.datasets[1].data = monthly['C'] || [];
+    window._chartTendBCD.data.datasets[2].data = monthly['D'] || [];
+    window._chartTendBCD.update();
+  }
+  if (window._chartTotalMensual) {
+    var totales = months.map(function(_,i){
+      return CLASSES.reduce(function(s,c){ return s + ((monthly[c] && monthly[c][i]) || 0); }, 0);
+    });
+    window._chartTotalMensual.data.datasets[0].data = totales;
+    window._chartTotalMensual.update();
+  }
+
+  // ── filter bar info labels ──
+  var label = (_mfCentro ? 'Centro '+_mfCentro : 'Ambos centros') + (_mfAlm ? ' · Almacén '+_mfAlm : '');
+  ['resumen','clasificacion','tendencia'].forEach(function(p){
+    var el = document.getElementById('mf-'+p+'-info');
+    if (el) el.textContent = (_mfCentro || _mfAlm) ? label : '';
+  });
+}
+
+/* ── Init main filter dropdowns ── */
+function initMainFilters() {
+  ['resumen','clasificacion','tendencia'].forEach(function(p){
+    rebuildAlmDropdown('mf-'+p, '');
+  });
+}
+
+function buildResumenTable() {
+  const total_mats = DATA.cls.reduce((s,d)=>s+d.mats,0);
+  const total_val = DATA.cls.reduce((s,d)=>s+d.valor,0);
+  const defs = {A:'Alta rotación',B:'Media-alta',C:'Rotación media',D:'Baja rotación',E:'Sin rotación',N:'Sin clasif.'};
+  const tbody = document.getElementById('tbodyResumen');
+  tbody.innerHTML = DATA.cls.map(d => {
+    const pMats = (d.mats/total_mats*100).toFixed(1);
+    const pVal = (d.valor/total_val*100).toFixed(1);
+    const barW = Math.round(d.valor/total_val*120);
+    return `<tr>
+      <td><span class="chip chip-${d.c.toLowerCase()}">${d.c}</span></td>
+      <td style="color:var(--text2);font-family:var(--font)">${defs[d.c]}</td>
+      <td>${fmtN(d.mats)}</td>
+      <td style="color:var(--text2)">${pMats}%</td>
+      <td>
+        <div class="bar-cell">
+          <div class="mini-bar" style="width:${barW}px;background:${COLORS[d.c]};opacity:0.7;"></div>
+          ${fmt(d.valor)}
+        </div>
+      </td>
+      <td style="color:var(--text2)">${pVal}%</td>
+      <td>${fmtN(d.ventas)}</td>
+      <td style="color:${d.fallas>50000?'#f85149':'var(--text)'}">${fmtN(d.fallas)}</td>
+      <td>${d.p6.toFixed(1)}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---- GRUPOS TABLE ---- */
+function buildGruposTable() { /* replaced by renderGrpSum() */ }
+
+/* ---- CHARTS ---- */
+const chartOpts = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false } }
+};
+
+function initCharts() {
+  /* Donut */
+  window._chartDonut = new Chart(document.getElementById('chartDonut'), {
+    type: 'doughnut',
+    data: {
+      labels: CLASSES,
+      datasets: [{ data: DATA.cls.map(d=>d.valor), backgroundColor: CLASSES.map(c=>COLORS[c]), borderColor: '#0d1117', borderWidth: 2, hoverOffset: 4 }]
+    },
+    options: { ...chartOpts, cutout: '62%',
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${fmt(ctx.raw)} (${(ctx.raw/DATA.cls.reduce((s,d)=>s+d.valor,0)*100).toFixed(1)}%)` } }
+      }
+    }
+  });
+
+  /* Bar resumen */
+  window._chartBarResumen = new Chart(document.getElementById('chartBarResumen'), {
+    type: 'bar',
+    data: {
+      labels: CLASSES,
+      datasets: [
+        { label: 'Materiales', data: DATA.cls.map(d=>d.mats), backgroundColor: CLASSES.map(c=>COLORS_BG[c]), borderColor: CLASSES.map(c=>COLORS[c]), borderWidth: 1, yAxisID: 'y' },
+        { label: 'Ventas', data: DATA.cls.map(d=>d.ventas/1000), backgroundColor: 'transparent', borderColor: '#d4a853', borderWidth: 2, type: 'line', yAxisID: 'y2', tension: 0.3, pointRadius: 4 }
+      ]
+    },
+    options: { ...chartOpts, scales: {
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b949e', font: { size: 11 } } },
+      y2: { position: 'right', grid: { display: false }, ticks: { color: '#d4a853', font: { size: 11 }, callback: v => v+'K' } },
+      x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+    },
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.datasetIndex===0 ? ` ${fmtN(ctx.raw)} materiales` : ` ${(ctx.raw).toFixed(0)}K ventas` } } }
+    }
+  });
+
+  /* Fallas vs Ventas */
+  window._chartFallasVentas = new Chart(document.getElementById('chartFallasVentas'), {
+    type: 'bar',
+    data: {
+      labels: CLASSES,
+      datasets: [
+        { label: 'Ventas', data: DATA.cls.map(d=>d.ventas), backgroundColor: CLASSES.map(c=>COLORS[c]+'99'), borderColor: CLASSES.map(c=>COLORS[c]), borderWidth: 1 },
+        { label: 'Fallas', data: DATA.cls.map(d=>d.fallas), backgroundColor: 'rgba(248,81,73,0.2)', borderColor: '#f85149', borderWidth: 1 }
+      ]
+    },
+    options: { ...chartOpts, scales: {
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b949e', font:{size:11}, callback: v => fmtN(v) } },
+      x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+    },
+    plugins: { legend: { display: false } }
+    }
+  });
+
+  /* Promedios */
+  window._chartPromedios = new Chart(document.getElementById('chartPromedios'), {
+    type: 'bar',
+    data: {
+      labels: CLASSES,
+      datasets: [
+        { label: 'Prom 6M', data: DATA.cls.map(d=>d.p6), backgroundColor: CLASSES.map(c=>COLORS[c]+'99'), borderColor: CLASSES.map(c=>COLORS[c]), borderWidth: 1 },
+        { label: 'Prom 12M', data: DATA.cls.map(d=>d.p12), backgroundColor: 'transparent', borderColor: '#d4a853', borderWidth: 2, type: 'line', tension: 0.3, pointRadius: 4 }
+      ]
+    },
+    options: { ...chartOpts, scales: {
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b949e', font:{size:11} } },
+      x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+    }, plugins: { legend: { display: false } } }
+  });
+
+  /* Tendencia A */
+  window._chartTendA = new Chart(document.getElementById('chartTendenciaA'), {
+    type: 'line',
+    data: {
+      labels: DATA.months,
+      datasets: [{ label: 'Clase A', data: DATA.monthly.A, borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,0.08)', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#3fb950' }]
+    },
+    options: { ...chartOpts, scales: {
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b949e', font:{size:11}, callback: v => fmtN(v) } },
+      x: { grid: { display: false }, ticks: { color: '#8b949e', autoSkip: false, maxRotation: 0 } }
+    }, plugins: { legend: { display: false } } }
+  });
+
+  /* Tendencia BCD */
+  window._chartTendBCD = new Chart(document.getElementById('chartTendenciaBCD'), {
+    type: 'line',
+    data: {
+      labels: DATA.months,
+      datasets: [
+        { label: 'B', data: DATA.monthly.B, borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.06)', fill: false, tension: 0.3, pointRadius: 3 },
+        { label: 'C', data: DATA.monthly.C, borderColor: '#ffa657', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 3 },
+        { label: 'D', data: DATA.monthly.D, borderColor: '#f0883e', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 3 }
+      ]
+    },
+    options: { ...chartOpts, scales: {
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b949e', font:{size:11} } },
+      x: { grid: { display: false }, ticks: { color: '#8b949e', autoSkip: false, maxRotation: 0 } }
+    }, plugins: { legend: { display: false } } }
+  });
+
+  /* Total mensual */
+  const totales = DATA.months.map((_,i) => CLASSES.reduce((s,c)=>s+(DATA.monthly[c][i]||0),0));
+  window._chartTotalMensual = new Chart(document.getElementById('chartTotalMensual'), {
+    type: 'bar',
+    data: {
+      labels: DATA.months,
+      datasets: [{ label: 'Total', data: totales, backgroundColor: 'rgba(212,168,83,0.3)', borderColor: '#d4a853', borderWidth: 1 }]
+    },
+    options: { ...chartOpts, scales: {
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b949e', font:{size:11}, callback: v => fmtN(v) } },
+      x: { grid: { display: false }, ticks: { color: '#8b949e', autoSkip: false, maxRotation: 0 } }
+    }, plugins: { legend: { display: false } } }
+  });
+
+  /* Grupos horizontal bar */
+  const g = DATA.grupos;
+  window._gdGrupoLabels = g.map(x=>x.g);
+  window._gdChart = new Chart(document.getElementById('chartGrupos'), {
+    type: 'bar',
+    data: {
+      labels: g.map(x=>x.g),
+      datasets: [{ data: g.map(x=>x.valor), backgroundColor: g.map(()=>'rgba(212,168,83,0.25)'), borderColor: g.map(()=>'#d4a853'), borderWidth: 1 }]
+    },
+    options: { ...chartOpts, indexAxis: 'y',
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b949e', font:{size:11}, callback: v => fmt(v) } },
+        y: { grid: { display: false }, ticks: { color: '#8b949e', font:{size:11} } }
+      },
+      plugins: { legend: { display: false } },
+      onClick: function(evt, els) {
+        if (!els.length) return;
+        var lbl = window._gdGrupoLabels[els[0].index];
+        setGDGrupo(lbl);
+      }
+    }
+  });
+
+  /* Centros doughnut 4105 */
+  const mkDoughnut = (id, centroData, color) => new Chart(document.getElementById(id), {
+    type: 'doughnut',
+    data: {
+      labels: CLASSES,
+      datasets: [{ data: CLASSES.map(c=>centroData[c]), backgroundColor: CLASSES.map(c=>COLORS[c]), borderColor: '#161b22', borderWidth: 2, hoverOffset: 4 }]
+    },
+    options: { ...chartOpts, cutout: '58%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${fmt(ctx.raw)}` } } } }
+  });
+  mkDoughnut('chart4105', DATA.centros['4105']);
+  mkDoughnut('chart4106', DATA.centros['4106']);
+
+  /* Comparativo */
+  new Chart(document.getElementById('chartComparativo'), {
+    type: 'bar',
+    data: {
+      labels: CLASSES,
+      datasets: [
+        { label: '4105', data: CLASSES.map(c=>DATA.centros['4105'][c]), backgroundColor: 'rgba(88,166,255,0.3)', borderColor: '#58a6ff', borderWidth: 1 },
+        { label: '4106', data: CLASSES.map(c=>DATA.centros['4106'][c]), backgroundColor: 'rgba(63,185,80,0.3)', borderColor: '#3fb950', borderWidth: 1 }
+      ]
+    },
+    options: { ...chartOpts, scales: {
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b949e', font:{size:11}, callback: v => fmt(v) } },
+      x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+    }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}` } } } }
+  });
+}
+
+/* ---- WEEKLY TRACKING ---- */
+function loadWeeks() {
+  try { return JSON.parse(localStorage.getItem('inv_weeks') || '[]'); } catch { return []; }
+}
+function saveWeeks(w) { localStorage.setItem('inv_weeks', JSON.stringify(w)); }
+
+const statusLabels = { open:'En proceso', done:'Completado', risk:'En riesgo' };
+const statusClass = { open:'status-open', done:'status-done', risk:'status-risk' };
+
+function renderWeeks() {
+  const weeks = loadWeeks();
+  const tbody = document.getElementById('weekBody');
+  const empty = document.getElementById('week-empty');
+  const count = document.getElementById('week-count');
+  count.textContent = weeks.length + ' semana' + (weeks.length!==1?'s':'');
+  if (!weeks.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = weeks.map((w,i) => `<tr>
+    <td style="font-family:var(--font-num);font-size:12px;color:var(--text2)">${w.semana}</td>
+    <td style="font-size:12px;color:var(--text3);font-family:var(--font-num)">${w.periodo}</td>
+    <td style="font-size:13px;color:var(--text)">${w.accion}</td>
+    <td>${w.clase!=='Todos'?`<span class="chip chip-${w.clase.toLowerCase()}">${w.clase}</span>`:'<span style="font-size:12px;color:var(--text3)">Todos</span>'}</td>
+    <td><span class="status-badge ${statusClass[w.status]}">${statusLabels[w.status]}</span></td>
+    <td style="font-size:12px;color:var(--text2)">${w.resp}</td>
+    <td><button class="comment-del" onclick="delWeek(${i})">✕</button></td>
+  </tr>`).join('');
+}
+
+function addWeekEntry() {
+  const sem = document.getElementById('sw-semana').value.trim();
+  const per = document.getElementById('sw-periodo').value.trim();
+  const acc = document.getElementById('sw-accion').value.trim();
+  const resp = document.getElementById('sw-resp').value.trim();
+  if (!sem || !acc) { alert('Por favor llena al menos la semana y la acción.'); return; }
+  const weeks = loadWeeks();
+  weeks.unshift({ semana: sem, periodo: per, accion: acc, clase: document.getElementById('sw-clase').value, status: document.getElementById('sw-status').value, resp: resp || '—', fecha: new Date().toLocaleDateString('es-MX') });
+  saveWeeks(weeks);
+  renderWeeks();
+  ['sw-semana','sw-periodo','sw-accion','sw-resp'].forEach(id => document.getElementById(id).value = '');
+}
+
+function delWeek(i) {
+  const weeks = loadWeeks();
+  weeks.splice(i,1);
+  saveWeeks(weeks);
+  renderWeeks();
+}
+
+/* ---- COMMENTS ---- */
+function loadComments() {
+  try { return JSON.parse(localStorage.getItem('inv_comments') || '[]'); } catch { return []; }
+}
+function saveComments(c) { localStorage.setItem('inv_comments', JSON.stringify(c)); }
+
+const tagColors = { alerta:'color:#ffa657;background:rgba(255,166,87,0.12);border:1px solid rgba(255,166,87,0.25)', accion:'color:#f85149;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2)', ok:'color:#3fb950;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.2)', info:'color:#58a6ff;background:rgba(88,166,255,0.1);border:1px solid rgba(88,166,255,0.2)', revision:'color:#d4a853;background:rgba(212,168,83,0.1);border:1px solid rgba(212,168,83,0.2)' };
+const tagLabels = { alerta:'⚠ Alerta', accion:'→ Acción', ok:'✓ OK', info:'ℹ Info', revision:'⟳ Revisar' };
+
+function renderComments() {
+  const comments = loadComments();
+  const list = document.getElementById('comments-list');
+  const empty = document.getElementById('comments-empty');
+  const cnt = document.getElementById('comment-count');
+  cnt.textContent = comments.length + ' comentario' + (comments.length!==1?'s':'');
+  if (!comments.length) { list.innerHTML = ''; list.appendChild(empty); empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  list.innerHTML = comments.map((c,i) => `<div class="comment-card">
+    <div class="comment-header">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="comment-author">${c.author || 'Anónimo'}</span>
+        ${c.clase?`<span class="chip chip-${c.clase.toLowerCase()}">${c.clase}</span>`:''}
+        <span class="comment-tag" style="${tagColors[c.tag]||'color:var(--text2)'};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600">${tagLabels[c.tag]||c.tag}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="comment-date">${c.fecha}</span>
+        <button class="comment-del" onclick="delComment(${i})">✕</button>
+      </div>
+    </div>
+    <div class="comment-text">${c.text}</div>
+  </div>`).join('');
+}
+
+function addComment() {
+  const text = document.getElementById('c-text').value.trim();
+  const author = document.getElementById('c-author').value.trim();
+  if (!text) { alert('Escribe un comentario.'); return; }
+  const comments = loadComments();
+  comments.unshift({ author: author||'Anónimo', tag: document.getElementById('c-tag').value, clase: document.getElementById('c-clase').value, text, fecha: new Date().toLocaleString('es-MX') });
+  saveComments(comments);
+  renderComments();
+  document.getElementById('c-text').value = '';
+}
+
+function delComment(i) {
+  const comments = loadComments();
+  comments.splice(i,1);
+  saveComments(comments);
+  renderComments();
+}
+
+
+/* ======== MATERIALS DATA ======== */
+coconst MAT_ALL = MDATA.materials;
+const GRUPOS_LIST = MDATA.grupos;
+
+/* ---- populate dropdowns ---- */
+function populateGrupoDropdowns() {
+  ['cruce-grupo','cat-grupo'].forEach(id => {
+    const sel = document.getElementById(id);
+    GRUPOS_LIST.forEach(g => {
+      const o = document.createElement('option');
+      o.value = g; o.textContent = g;
+      sel.appendChild(o);
+    });
+  });
+}
+
+/* ---- CRUCE state ---- */
+let crucePage = 1; const CRUCE_PER = 50;
+let cruceFiltered = []; let cruceSortKey = 'mat'; let cruceSortAsc = true;
+
+function getCruceData() {
+  const grupo = document.getElementById('cruce-grupo').value;
+  const dir = document.getElementById('cruce-dir').value;
+  const search = document.getElementById('cruce-search').value.toLowerCase().trim();
+  let data = MAT_ALL.filter(m => m.cruce);
+  if (grupo) data = data.filter(m => m.grupo === grupo);
+  if (dir === '5low') data = data.filter(m => (m.cls5==='D'||m.cls5==='E') && (m.cls6==='A'||m.cls6==='B'));
+  else if (dir === '6low') data = data.filter(m => (m.cls6==='D'||m.cls6==='E') && (m.cls5==='A'||m.cls5==='B'));
+  else if (dir === 'DE_A') data = data.filter(m => (m.cls5==='E'&&m.cls6==='A')||(m.cls6==='E'&&m.cls5==='A'));
+  else if (dir === 'DE_B') data = data.filter(m => (m.cls5==='E'&&m.cls6==='B')||(m.cls6==='E'&&m.cls5==='B'));
+  if (search) data = data.filter(m => m.mat.toLowerCase().includes(search)||m.desc.toLowerCase().includes(search));
+  data = [...data].sort((a,b) => {
+    let va = a[cruceSortKey]||'', vb = b[cruceSortKey]||'';
+    if (typeof va === 'number') return cruceSortAsc ? va-vb : vb-va;
+    return cruceSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+  return data;
+}
+
+function sortCruce(key) {
+  if (cruceSortKey === key) cruceSortAsc = !cruceSortAsc;
+  else { cruceSortKey = key; cruceSortAsc = true; }
+  document.querySelectorAll('[id^=si-cruce]').forEach(el => el.textContent = '');
+  const el = document.getElementById('si-cruce-'+key);
+  if (el) el.textContent = cruceSortAsc ? '↑' : '↓';
+  crucePage = 1; renderCruce();
+}
+
+function renderCruce() {
+  cruceFiltered = getCruceData();
+  const total = cruceFiltered.length;
+  const totalPages = Math.max(1, Math.ceil(total / CRUCE_PER));
+  if (crucePage > totalPages) crucePage = totalPages;
+  const slice = cruceFiltered.slice((crucePage-1)*CRUCE_PER, crucePage*CRUCE_PER);
+  document.getElementById('cruce-count').textContent = total.toLocaleString('es-MX') + ' materiales';
+  document.getElementById('cruce-page-info').textContent = `Pág ${crucePage} / ${totalPages} (${total.toLocaleString('es-MX')} registros)`;
+  document.getElementById('cruce-prev').disabled = crucePage <= 1;
+  document.getElementById('cruce-next').disabled = crucePage >= totalPages;
+
+  // update KPIs
+  const all_cross = MAT_ALL.filter(m=>m.cruce);
+  const low=['D','E'], high=['A','B'];
+  const fmtMXN = v => '$' + Math.round(v).toLocaleString('es-MX');
+  const valOf = (arr, side) => arr.reduce((s,m) => {
+    const stk = side==='5' ? m.stk5 : side==='6' ? m.stk6 : (m.stk5+m.stk6);
+    return s + stk * m.costo;
+  }, 0);
+
+  const g5low = all_cross.filter(m=>low.includes(m.cls5)&&high.includes(m.cls6));
+  const g6low = all_cross.filter(m=>low.includes(m.cls6)&&high.includes(m.cls5));
+  const gRisk = all_cross.filter(m=>(low.includes(m.cls5)&&m.stk5>0)||(low.includes(m.cls6)&&m.stk6>0));
+
+  document.getElementById('ck-total').textContent = all_cross.length.toLocaleString('es-MX');
+  document.getElementById('ck-total-val').textContent = fmtMXN(valOf(all_cross,'both'));
+  document.getElementById('ck-5low').textContent = g5low.length.toLocaleString('es-MX');
+  document.getElementById('ck-5low-val').textContent = fmtMXN(valOf(g5low,'5')) + ' inm. en 4105';
+  document.getElementById('ck-6low').textContent = g6low.length.toLocaleString('es-MX');
+  document.getElementById('ck-6low-val').textContent = fmtMXN(valOf(g6low,'6')) + ' inm. en 4106';
+  document.getElementById('ck-stock-risk').textContent = gRisk.length.toLocaleString('es-MX');
+  const riskVal = gRisk.reduce((s,m)=>{
+    const v5 = low.includes(m.cls5) && m.stk5>0 ? m.stk5*m.costo : 0;
+    const v6 = low.includes(m.cls6) && m.stk6>0 ? m.stk6*m.costo : 0;
+    return s + v5 + v6;
+  },0);
+  document.getElementById('ck-stock-risk-val').textContent = fmtMXN(riskVal) + ' en riesgo';
+
+  const tbody = document.getElementById('cruce-tbody');
+  if (!slice.length) { tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3);">Sin resultados para los filtros seleccionados.</td></tr>'; return; }
+  tbody.innerHTML = slice.map(m => {
+    const c5low = ['D','E'].includes(m.cls5), c6low = ['D','E'].includes(m.cls6);
+    const chip5 = `<span class="chip chip-${m.cls5.toLowerCase()}${m.cls5==='—'?'-n':''}">${m.cls5}</span>`;
+    const chip6 = `<span class="chip chip-${m.cls6.toLowerCase()}${m.cls6==='—'?'-n':''}">${m.cls6}</span>`;
+    const riskIndicator = (c5low&&m.stk5>0)||(c6low&&m.stk6>0) ? ' <span style="color:#f85149;font-size:10px;">● stock</span>' : '';
+    return `<tr>
+      <td style="font-family:var(--font-num);color:var(--gold)">${m.mat}${riskIndicator}</td>
+      <td class="desc-cell" title="${m.desc}">${m.desc}</td>
+      <td style="font-family:var(--font);color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${m.grupo}">${m.grupo}</td>
+      <td style="text-align:center">${chip5}</td>
+      <td style="text-align:center">${chip6}</td>
+      <td style="text-align:right;${c5low&&m.stk5>0?'color:#f85149;font-weight:500':''}">${m.stk5.toLocaleString('es-MX')}</td>
+      <td style="text-align:right;${c6low&&m.stk6>0?'color:#f85149;font-weight:500':''}">${m.stk6.toLocaleString('es-MX')}</td>
+      <td style="text-align:right">${m.vta5.toLocaleString('es-MX')}</td>
+      <td style="text-align:right">${m.vta6.toLocaleString('es-MX')}</td>
+      <td style="text-align:right">${m.costo>0?'$'+m.costo.toFixed(2):'—'}</td>
+      <td style="text-align:right;color:var(--text2)">${m.prom6.toFixed(1)}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---- CATALOGO state ---- */
+let catPage = 1; const CAT_PER = 50;
+let catFiltered = []; let catSortKey = 'mat'; let catSortAsc = true;
+
+function getCatData() {
+  const grupo = document.getElementById('cat-grupo').value;
+  const cls5 = document.getElementById('cat-cls5').value;
+  const cls6 = document.getElementById('cat-cls6').value;
+  const onlyCruce = document.getElementById('cat-cruce').value;
+  const search = document.getElementById('cat-search').value.toLowerCase().trim();
+  let data = [...MAT_ALL];
+  if (grupo) data = data.filter(m => m.grupo === grupo);
+  if (cls5) data = data.filter(m => m.cls5 === cls5);
+  if (cls6) data = data.filter(m => m.cls6 === cls6);
+  if (onlyCruce === 'yes') data = data.filter(m => m.cruce);
+  if (search) data = data.filter(m => m.mat.toLowerCase().includes(search)||m.desc.toLowerCase().includes(search)||(m.proveedor||'').toLowerCase().includes(search));
+  data = [...data].sort((a,b) => {
+    let va = a[catSortKey]||'', vb = b[catSortKey]||'';
+    if (typeof va === 'number') return catSortAsc ? va-vb : vb-va;
+    return catSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+  return data;
+}
+
+function sortCat(key) {
+  if (catSortKey === key) catSortAsc = !catSortAsc;
+  else { catSortKey = key; catSortAsc = true; }
+  document.querySelectorAll('[id^=si-cat]').forEach(el => el.textContent = '');
+  const el = document.getElementById('si-cat-'+key);
+  if (el) el.textContent = catSortAsc ? '↑' : '↓';
+  catPage = 1; renderCatalogo();
+}
+
+function renderCatalogo() {
+  catFiltered = getCatData();
+  const total = catFiltered.length;
+  const totalPages = Math.max(1, Math.ceil(total / CAT_PER));
+  if (catPage > totalPages) catPage = totalPages;
+  const slice = catFiltered.slice((catPage-1)*CAT_PER, catPage*CAT_PER);
+  document.getElementById('cat-count').textContent = total.toLocaleString('es-MX') + ' materiales';
+  document.getElementById('cat-page-info').textContent = `Pág ${catPage} / ${totalPages} (${total.toLocaleString('es-MX')} registros)`;
+  document.getElementById('cat-prev').disabled = catPage <= 1;
+  document.getElementById('cat-next').disabled = catPage >= totalPages;
+  const tbody = document.getElementById('cat-tbody');
+  if (!slice.length) { tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--text3);">Sin resultados.</td></tr>'; return; }
+  tbody.innerHTML = slice.map(m => {
+    const hasCruce = m.cruce ? `<span style="color:var(--gold);font-size:10px;margin-left:4px;">⇄</span>` : '';
+    return `<tr>
+      <td style="font-family:var(--font-num);color:var(--gold)">${m.mat}${hasCruce}</td>
+      <td class="desc-cell" title="${m.desc}">${m.desc}</td>
+      <td style="font-family:var(--font);color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis" title="${m.grupo}">${m.grupo}</td>
+      <td style="text-align:center"><span class="chip chip-${(m.cls5||'n').toLowerCase()}">${m.cls5||'—'}</span></td>
+      <td style="text-align:center"><span class="chip chip-${(m.cls6||'n').toLowerCase()}">${m.cls6||'—'}</span></td>
+      <td style="text-align:right">${m.stk5.toLocaleString('es-MX')}</td>
+      <td style="text-align:right">${m.stk6.toLocaleString('es-MX')}</td>
+      <td style="text-align:right">${m.vta5.toLocaleString('es-MX')}</td>
+      <td style="text-align:right">${m.vta6.toLocaleString('es-MX')}</td>
+      <td style="text-align:right">${m.costo>0?'$'+m.costo.toFixed(2):'—'}</td>
+      <td style="text-align:right">${m.valor>0?'$'+m.valor.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}):'—'}</td>
+      <td style="text-align:right;color:var(--text2)">${m.prom6.toFixed(1)}</td>
+      <td style="font-family:var(--font);color:var(--text3);max-width:150px;overflow:hidden;text-overflow:ellipsis" title="${m.proveedor}">${m.proveedor||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function changePage(ctx, dir) {
+  if (ctx === 'cruce') { crucePage += dir; renderCruce(); }
+  else { catPage += dir; renderCatalogo(); }
+}
+
+/* ---- CSV EXPORT ---- */
+function exportCSV(ctx) {
+  const data = ctx === 'cruce' ? cruceFiltered : catFiltered;
+  if (!data.length) return;
+  const headers = ctx === 'cruce'
+    ? ['Material','Descripcion','Grupo','Cls_4105','Cls_4106','Cruce','Stock_4105','Stock_4106','Ventas_4105','Ventas_4106','Costo_Unit','Prom_6M']
+    : ['Material','Descripcion','Grupo','Cls_4105','Cls_4106','Cruce','Stock_4105','Stock_4106','Ventas_4105','Ventas_4106','Costo_Unit','Valor_Inv','Prom_6M','Proveedor'];
+  const rows = data.map(m => ctx === 'cruce'
+    ? [m.mat,`"${m.desc}"`,`"${m.grupo}"`,m.cls5,m.cls6,`"${m.cruce}"`,m.stk5,m.stk6,m.vta5,m.vta6,m.costo,m.prom6]
+    : [m.mat,`"${m.desc}"`,`"${m.grupo}"`,m.cls5,m.cls6,`"${m.cruce||''}"`,m.stk5,m.stk6,m.vta5,m.vta6,m.costo,m.valor,m.prom6,`"${m.proveedor||''}"`]);
+  const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=ctx==='cruce'?'cruce_abc.csv':'catalogo_materiales.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+
+/* ======== GRUPOS DETAIL ======== */
+var var GD_ROWS = GDATA.rows;
+var GD_ALMS = GDATA.almacenes;
+var GD_GRUPOS = GDATA.grupos;
+var gdPage = 1, GD_PER = 50;
+var gdFiltered = [], gdSortKey = 'mat', gdSortAsc = true;
+var gdActiveGrupo = '';
+var grpSumSortKey = 'val', grpSumSortAsc = false;
+
+function gdInit() {
+  // populate grupo dropdown
+  var sel = document.getElementById('gd-grupo');
+  sel.innerHTML = '<option value="">Todos los grupos</option>';
+  GD_GRUPOS.forEach(function(g) {
+    var o = document.createElement('option');
+    o.value = g;
+    o.textContent = g.length > 50 ? g.substring(0,50)+'...' : g;
+    o.title = g;
+    sel.appendChild(o);
+  });
+  gdPopulateAlm('');
+  renderGD();
+  renderGrpSum();
+}
+
+function gdPopulateAlm(centro) {
+  var sel = document.getElementById('gd-alm');
+  var prev = sel.value;
+  sel.innerHTML = '<option value="">Todos los almacenes</option>';
+  GD_ALMS.filter(function(a){ return !centro || a.c === centro; }).forEach(function(a) {
+    var o = document.createElement('option');
+    o.value = a.a;
+    o.textContent = a.a + ' — ' + a.n;
+    sel.appendChild(o);
+  });
+  var opts = sel.options;
+  for (var i=0; i<opts.length; i++) { if (opts[i].value === prev) { sel.value = prev; break; } }
+}
+
+function onGDCentroChange() { gdPopulateAlm(document.getElementById('gd-centro').value); renderGD(); }
+function onGDGrupoChange() {
+  gdActiveGrupo = document.getElementById('gd-grupo').value;
+  gdHighlightChart();
+  var lbl = document.getElementById('grp-selected-label');
+  var btn = document.getElementById('grp-clear-btn');
+  if (gdActiveGrupo) { lbl.textContent = '● ' + gdActiveGrupo; lbl.style.display='block'; btn.style.display=''; }
+  else { lbl.style.display='none'; btn.style.display='none'; }
+  gdPage = 1; renderGD(); renderGrpSum();
+}
+
+function setGDGrupo(label) {
+  gdActiveGrupo = label;
+  document.getElementById('gd-grupo').value = label;
+  document.getElementById('grp-selected-label').textContent = '● ' + label;
+  document.getElementById('grp-selected-label').style.display = 'block';
+  document.getElementById('grp-clear-btn').style.display = '';
+  gdHighlightChart();
+  gdPage = 1; renderGD(); renderGrpSum();
+  var panel = document.getElementById('gd-tbody');
+  if (panel) panel.closest('.panel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function clearGrupoFilter() {
+  gdActiveGrupo = '';
+  document.getElementById('gd-grupo').value = '';
+  document.getElementById('grp-selected-label').style.display = 'none';
+  document.getElementById('grp-clear-btn').style.display = 'none';
+  gdHighlightChart();
+  gdPage = 1; renderGD(); renderGrpSum();
+}
+
+function gdHighlightChart() {
+  if (!window._gdChart) return;
+  var labels = window._gdGrupoLabels || [];
+  window._gdChart.data.datasets[0].backgroundColor = labels.map(function(l){ return l===gdActiveGrupo?'#d4a853':'rgba(212,168,83,0.25)'; });
+  window._gdChart.data.datasets[0].borderColor = labels.map(function(l){ return l===gdActiveGrupo?'#f5c842':'#d4a853'; });
+  window._gdChart.update();
+}
+
+function gdGetFiltered() {
+  var grupo = gdActiveGrupo || document.getElementById('gd-grupo').value;
+  var centro = document.getElementById('gd-centro').value;
+  var alm = document.getElementById('gd-alm').value;
+  var cls = document.getElementById('gd-cls').value;
+  var stockF = document.getElementById('gd-stock').value;
+  var search = document.getElementById('gd-search').value.toLowerCase().trim();
+  var data = GD_ROWS.slice();
+  if (grupo) data = data.filter(function(r){ return r.grupo === grupo; });
+  if (centro) data = data.filter(function(r){ return r.centro === centro; });
+  if (cls) data = data.filter(function(r){ return r.cls_c === cls; });
+  if (stockF === '1') data = data.filter(function(r){ return r.stk_c > 0; });
+  if (stockF === '0') data = data.filter(function(r){ return r.stk_c === 0; });
+  if (alm) data = data.filter(function(r){ return r.alms && r.alms.some(function(a){ return a.a === alm; }); });
+  if (search) data = data.filter(function(r){ return r.mat.toLowerCase().indexOf(search)>=0 || r.desc.toLowerCase().indexOf(search)>=0; });
+  var k = gdSortKey, asc = gdSortAsc;
+  data.sort(function(a,b){
+    var va = a[k] !== undefined ? a[k] : '', vb = b[k] !== undefined ? b[k] : '';
+    if (typeof va === 'number') return asc ? va-vb : vb-va;
+    return asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+  return data;
+}
+
+function sortGD(key) {
+  if (gdSortKey === key) gdSortAsc = !gdSortAsc; else { gdSortKey = key; gdSortAsc = true; }
+  document.querySelectorAll('[id^=si-gd-]').forEach(function(el){ el.textContent=''; });
+  var el = document.getElementById('si-gd-'+key);
+  if (el) el.textContent = gdSortAsc ? '↑' : '↓';
+  gdPage = 1; renderGD();
+}
+
+function renderGD() {
+  gdFiltered = gdGetFiltered();
+  var total = gdFiltered.length;
+  var totalPages = Math.max(1, Math.ceil(total/GD_PER));
+  if (gdPage > totalPages) gdPage = totalPages;
+  var slice = gdFiltered.slice((gdPage-1)*GD_PER, gdPage*GD_PER);
+  document.getElementById('gd-count').textContent = total.toLocaleString('es-MX') + ' materiales';
+  document.getElementById('gd-page-info').textContent = 'Pág ' + gdPage + ' / ' + totalPages + ' (' + total.toLocaleString('es-MX') + ' registros)';
+  document.getElementById('gd-prev').disabled = gdPage <= 1;
+  document.getElementById('gd-next').disabled = gdPage >= totalPages;
+  // KPIs
+  var totStk=0, totVta=0, totFal=0, totP6=0;
+  gdFiltered.forEach(function(r){ totStk+=r.stk_c; totVta+=r.vta; totFal+=r.fal; totP6+=r.p6; });
+  document.getElementById('gd-k-mats').textContent = total.toLocaleString('es-MX');
+  document.getElementById('gd-k-stk').textContent = totStk.toLocaleString('es-MX');
+  document.getElementById('gd-k-vta').textContent = totVta.toLocaleString('es-MX');
+  document.getElementById('gd-k-fal').textContent = totFal.toLocaleString('es-MX');
+  document.getElementById('gd-k-p6').textContent = total ? (totP6/total).toFixed(2) : '0.00';
+  // Table
+  var tbody = document.getElementById('gd-tbody');
+  var almF = document.getElementById('gd-alm').value;
+  if (!slice.length) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3)">Sin resultados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  slice.forEach(function(r) {
+    var chip = '<span class="chip chip-' + (r.cls_c||'n').toLowerCase() + '">' + (r.cls_c||'—') + '</span>';
+    var centBadge = r.centro === '4105'
+      ? '<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:rgba(88,166,255,0.12);color:#58a6ff;font-family:var(--font-num)">4105</span>'
+      : '<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:rgba(63,185,80,0.12);color:#3fb950;font-family:var(--font-num)">4106</span>';
+    var almHtml = '<span style="color:var(--text3);font-size:11px;">—</span>';
+    if (r.alms && r.alms.length) {
+      almHtml = r.alms.map(function(a) {
+        var isA = almF && a.a === almF;
+        var bg = isA ? 'rgba(212,168,83,0.2)' : 'rgba(255,255,255,0.06)';
+        var col = isA ? '#d4a853' : '#8b949e';
+        return '<span title="' + a.n + '" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:8px;background:' + bg + ';color:' + col + ';margin:1px;font-family:var(--font-num)">' + a.a + ' <span style="color:#3fb950">' + a.s + '</span></span>';
+      }).join('');
+    }
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td style="font-family:var(--font-num);color:var(--gold);font-size:12px">' + r.mat + '</td>' +
+      '<td class="desc-cell" title="' + r.desc.replace(/"/g,'&quot;') + '" style="font-family:var(--font);font-size:12px">' + r.desc + '</td>' +
+      '<td style="font-family:var(--font);color:var(--text2);max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="' + r.grupo.replace(/"/g,'&quot;') + '">' + r.grupo + '</td>' +
+      '<td style="text-align:center">' + centBadge + '</td>' +
+      '<td style="text-align:center">' + chip + '</td>' +
+      '<td style="text-align:right;' + (r.stk_c>0?'color:var(--a);font-weight:500':'color:var(--text3)') + '">' + r.stk_c.toLocaleString('es-MX') + '</td>' +
+      '<td>' + almHtml + '</td>' +
+      '<td style="text-align:right">' + r.vta.toLocaleString('es-MX') + '</td>' +
+      '<td style="text-align:right;' + (r.fal>100?'color:var(--e)':'') + '">' + r.fal.toLocaleString('es-MX') + '</td>' +
+      '<td style="text-align:right">' + (r.costo>0?'$'+r.costo.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}):'—') + '</td>' +
+      '<td style="text-align:right;color:var(--text2)">' + r.p6.toFixed(1) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function changeGDPage(dir) { gdPage += dir; renderGD(); }
+
+function renderGrpSum() {
+  var centro = document.getElementById('gd-centro').value;
+  var cls = document.getElementById('gd-cls').value;
+  var base = GD_ROWS;
+  if (centro) base = base.filter(function(r){ return r.centro===centro; });
+  if (cls) base = base.filter(function(r){ return r.cls_c===cls; });
+  var map = {};
+  base.forEach(function(r) {
+    if (!map[r.grupo]) map[r.grupo] = {g:r.grupo,mats:0,val:0,vta:0,fal:0};
+    map[r.grupo].mats++;
+    map[r.grupo].val += r.costo * r.stk_c;
+    map[r.grupo].vta += r.vta;
+    map[r.grupo].fal += r.fal;
+  });
+  var rows = Object.values(map);
+  rows.forEach(function(r){ r.ratio = r.vta>0 ? parseFloat((r.fal/r.vta).toFixed(2)) : 0; });
+  var k = grpSumSortKey, asc = grpSumSortAsc;
+  rows.sort(function(a,b){ return asc ? a[k]-b[k] : b[k]-a[k]; });
+  var tbody = document.getElementById('grp-sum-tbody');
+  tbody.innerHTML = '';
+  rows.forEach(function(r) {
+    var isActive = r.g === gdActiveGrupo;
+    var valStr = r.val>=1e6?(r.val/1e6).toFixed(1)+'M':r.val>=1e3?(r.val/1e3).toFixed(0)+'K':r.val.toFixed(0);
+    var rColor = r.ratio>3?'color:#f85149':r.ratio>1.5?'color:#ffa657':'color:#3fb950';
+    var tr = document.createElement('tr');
+    tr.style.cssText = (isActive?'background:rgba(212,168,83,0.08);':'') + 'cursor:pointer';
+    tr.dataset.grupo = r.g;
+    tr.addEventListener('click', function(){ setGDGrupo(this.dataset.grupo); });
+    tr.innerHTML =
+      '<td style="font-family:var(--font);font-size:12px;' + (isActive?'color:var(--gold);font-weight:500':'color:var(--text2)') + ';max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + r.g.replace(/"/g,'&quot;') + '">' + (isActive?'● ':'') + r.g + '</td>' +
+      '<td style="text-align:right;font-size:12px">' + r.mats.toLocaleString('es-MX') + '</td>' +
+      '<td style="text-align:right;font-size:12px">$' + valStr + '</td>' +
+      '<td style="text-align:right;font-size:12px">' + r.vta.toLocaleString('es-MX') + '</td>' +
+      '<td style="text-align:right;font-size:12px;' + rColor + '">' + r.ratio + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function sortGrpSum(key) {
+  if (grpSumSortKey===key) grpSumSortAsc=!grpSumSortAsc; else { grpSumSortKey=key; grpSumSortAsc=false; }
+  ['g','mats','val','vta','ratio'].forEach(function(k){ var el=document.getElementById('ssi-'+k); if(el) el.textContent=''; });
+  var el = document.getElementById('ssi-'+key);
+  if (el) el.textContent = grpSumSortAsc?'↑':'↓';
+  renderGrpSum();
+}
+
+function exportGrupoDetail() {
+  if (!gdFiltered.length) return;
+  var headers = ['Material','Descripcion','Grupo','Centro','Cls_Ctro','Stock_Ctro','Almacenes_Stock','Ventas','Fallas','Costo_Unit','Prom_6M'];
+  var rows = gdFiltered.map(function(r) {
+    return [r.mat, '"'+r.desc.replace(/"/g,'""')+'"', '"'+r.grupo.replace(/"/g,'""')+'"', r.centro, r.cls_c, r.stk_c,
+      '"'+(r.alms||[]).map(function(a){ return a.a+':'+a.n+'='+a.s; }).join(' | ')+'"',
+      r.vta, r.fal, r.costo, r.p6].join(',');
+  });
+  var csv = [headers.join(',')].concat(rows).join('\n');
+  var blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a'); a.href=url; a.download='detalle_grupos.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+
+/* ======== OBSOLETOS ======== */
+var OB_ALL = (function(){
+  return GD_ROWS.filter(function(r){ return r.cls_c==='D'||r.cls_c==='E'; }).map(function(r){
+    return Object.assign({}, r, {val_inm: Math.round(r.stk_c * r.costo * 100)/100});
+  });
+})();
+
+var obPage=1, OB_PER=50, obFiltered=[], obSortKey='val_inm', obSortAsc=false;
+
+function obInit(){
+  var gSel=document.getElementById('ob-grupo');
+  gSel.innerHTML='<option value="">Todos los grupos</option>';
+  var grps=[];
+  OB_ALL.forEach(function(r){ if(r.grupo && grps.indexOf(r.grupo)<0) grps.push(r.grupo); });
+  grps.sort().forEach(function(g){
+    var o=document.createElement('option'); o.value=g;
+    o.textContent=g.length>45?g.substring(0,45)+'...':g; o.title=g;
+    gSel.appendChild(o);
+  });
+  obPopulateAlm();
+  renderObs();
+  initObCharts();
+}
+
+function obPopulateAlm(){
+  var centro=document.getElementById('ob-centro').value;
+  var sel=document.getElementById('ob-alm');
+  var prev=sel.value;
+  sel.innerHTML='<option value="">Todos los almacenes</option>';
+  GD_ALMS.filter(function(a){ return !centro||a.c===centro; }).forEach(function(a){
+    var o=document.createElement('option'); o.value=a.a;
+    o.textContent=a.a+' — '+a.n; sel.appendChild(o);
+  });
+  var opts=sel.options;
+  for(var i=0;i<opts.length;i++){ if(opts[i].value===prev){sel.value=prev;break;} }
+}
+
+function obGetFiltered(){
+  var cls=document.getElementById('ob-cls').value;
+  var centro=document.getElementById('ob-centro').value;
+  var alm=document.getElementById('ob-alm').value;
+  var grupo=document.getElementById('ob-grupo').value;
+  var stockF=document.getElementById('ob-stock').value;
+  var search=document.getElementById('ob-search').value.toLowerCase().trim();
+  var data=OB_ALL.slice();
+  if(cls) data=data.filter(function(r){return r.cls_c===cls;});
+  if(centro) data=data.filter(function(r){return r.centro===centro;});
+  if(grupo) data=data.filter(function(r){return r.grupo===grupo;});
+  if(stockF==='1') data=data.filter(function(r){return r.stk_c>0;});
+  if(stockF==='0') data=data.filter(function(r){return r.stk_c===0;});
+  if(alm) data=data.filter(function(r){return r.alms&&r.alms.some(function(a){return a.a===alm;});});
+  if(search) data=data.filter(function(r){return r.mat.toLowerCase().indexOf(search)>=0||r.desc.toLowerCase().indexOf(search)>=0;});
+  var k=obSortKey,asc=obSortAsc;
+  data.sort(function(a,b){
+    var va=a[k]!==undefined?a[k]:'', vb=b[k]!==undefined?b[k]:'';
+    if(typeof va==='number') return asc?va-vb:vb-va;
+    return asc?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va));
+  });
+  return data;
+}
+
+function sortObs(key){
+  if(obSortKey===key) obSortAsc=!obSortAsc; else{obSortKey=key;obSortAsc=false;}
+  document.querySelectorAll('[id^=si-ob-]').forEach(function(el){el.textContent='';});
+  var el=document.getElementById('si-ob-'+key);
+  if(el) el.textContent=obSortAsc?'↑':'↓';
+  obPage=1; renderObs();
+}
+
+function renderObs(){
+  obFiltered=obGetFiltered();
+  var total=obFiltered.length;
+  var tp=Math.max(1,Math.ceil(total/OB_PER));
+  if(obPage>tp) obPage=tp;
+  var slice=obFiltered.slice((obPage-1)*OB_PER,obPage*OB_PER);
+  document.getElementById('ob-count').textContent=total.toLocaleString('es-MX')+' materiales';
+  document.getElementById('ob-page-info').textContent='Pág '+obPage+' / '+tp+' ('+total.toLocaleString('es-MX')+' registros)';
+  document.getElementById('ob-prev').disabled=obPage<=1;
+  document.getElementById('ob-next').disabled=obPage>=tp;
+
+  // Update KPIs
+  var totD=0,totE=0,totStk=0,totVal=0;
+  obFiltered.forEach(function(r){
+    if(r.cls_c==='D') totD++; else totE++;
+    if(r.stk_c>0) totStk++;
+    totVal+=r.val_inm;
+  });
+  document.getElementById('ob-k-total').textContent=total.toLocaleString('es-MX');
+  document.getElementById('ob-k-d').textContent=totD.toLocaleString('es-MX');
+  document.getElementById('ob-k-e').textContent=totE.toLocaleString('es-MX');
+  document.getElementById('ob-k-stk').textContent=totStk.toLocaleString('es-MX');
+  var valStr=totVal>=1e6?'$'+(totVal/1e6).toFixed(1)+'M':totVal>=1e3?'$'+(totVal/1e3).toFixed(0)+'K':'$'+totVal.toFixed(0);
+  document.getElementById('ob-k-val').textContent=valStr;
+
+  var tbody=document.getElementById('ob-tbody');
+  var almF=document.getElementById('ob-alm').value;
+  if(!slice.length){
+    tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text3)">Sin resultados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML='';
+  slice.forEach(function(r){
+    var chip='<span class="chip chip-'+r.cls_c.toLowerCase()+'">'+r.cls_c+'</span>';
+    var centBadge=r.centro==='4105'
+      ?'<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:rgba(88,166,255,0.12);color:#58a6ff;font-family:var(--font-num)">4105</span>'
+      :'<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:rgba(63,185,80,0.12);color:#3fb950;font-family:var(--font-num)">4106</span>';
+    var almHtml='<span style="color:var(--text3);font-size:11px;">—</span>';
+    if(r.alms&&r.alms.length){
+      var almWithStk=r.alms.filter(function(a){return a.s>0;});
+      var toShow=almWithStk.length?almWithStk:r.alms.slice(0,3);
+      almHtml=toShow.map(function(a){
+        var isA=almF&&a.a===almF;
+        var bg=isA?'rgba(212,168,83,0.2)':a.s>0?'rgba(248,81,73,0.1)':'rgba(255,255,255,0.05)';
+        var col=isA?'#d4a853':a.s>0?'#f85149':'#6e7681';
+        return '<span title="'+a.n+'" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:8px;background:'+bg+';color:'+col+';margin:1px;font-family:var(--font-num)">'+a.a+(a.s>0?' <b>'+a.s+'</b>':'')+'</span>';
+      }).join('');
+    }
+    var valInmStr=r.val_inm>0?'$'+r.val_inm.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}):'—';
+    var tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td style="font-family:var(--font-num);color:var(--gold);font-size:12px">'+r.mat+'</td>'+
+      '<td class="desc-cell" title="'+r.desc.replace(/"/g,'&quot;')+'" style="font-family:var(--font);font-size:12px">'+r.desc+'</td>'+
+      '<td style="font-family:var(--font);color:var(--text2);max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:11px" title="'+r.grupo.replace(/"/g,'&quot;')+'">'+r.grupo+'</td>'+
+      '<td style="text-align:center">'+centBadge+'</td>'+
+      '<td style="text-align:center">'+chip+'</td>'+
+      '<td style="text-align:right;'+(r.stk_c>0?'color:#f85149;font-weight:500':'color:var(--text3)')+'">'+r.stk_c.toLocaleString('es-MX')+'</td>'+
+      '<td style="text-align:right;'+(r.val_inm>0?'color:#d4a853;font-weight:500':'color:var(--text3)')+'">'+valInmStr+'</td>'+
+      '<td>'+almHtml+'</td>'+
+      '<td style="text-align:right">'+r.vta.toLocaleString('es-MX')+'</td>'+
+      '<td style="text-align:right;'+(r.fal>50?'color:#ffa657':'')+'">'+r.fal.toLocaleString('es-MX')+'</td>'+
+      '<td style="text-align:right;color:var(--text2)">'+r.p6.toFixed(1)+'</td>'+
+      '<td style="text-align:right">'+( r.costo>0?'$'+r.costo.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}):'—')+'</td>';
+    tbody.appendChild(tr);
+  });
+  updateObCharts();
+}
+
+function changeObPage(dir){ obPage+=dir; renderObs(); }
+
+/* ---- Charts ---- */
+var _obChartDist=null, _obChartMonthly=null, _obChartGrupos=null, _obChartAlm=null, _obChartGruposLabels=[], _obChartAlmCodes=[], _obChartAlmNames=[];
+
+function obHighlightChart(){
+  if(!_obChartGrupos||!_obChartGruposLabels.length) return;
+  var active=document.getElementById('ob-grupo').value;
+  _obChartGrupos.data.datasets[0].backgroundColor=_obChartGruposLabels.map(function(l){
+    return l===active?'#f0883e':'rgba(240,136,62,0.4)';
+  });
+  _obChartGrupos.data.datasets[1].backgroundColor=_obChartGruposLabels.map(function(l){
+    return l===active?'#f85149':'rgba(248,81,73,0.3)';
+  });
+  _obChartGrupos.update();
+}
+
+function obHighlightAlmChart(){
+  if(!_obChartAlm||!_obChartAlmCodes.length) return;
+  var active=document.getElementById('ob-alm').value;
+  _obChartAlm.data.datasets[0].backgroundColor=_obChartAlmCodes.map(function(c){
+    return c===active?'#f0883e':'rgba(240,136,62,0.4)';
+  });
+  _obChartAlm.data.datasets[1].backgroundColor=_obChartAlmCodes.map(function(c){
+    return c===active?'#f85149':'rgba(248,81,73,0.3)';
+  });
+  _obChartAlm.update();
+}
+
+function obClearAlmFilter(){
+  document.getElementById('ob-alm').value='';
+  document.getElementById('ob-alm-active-label').textContent='';
+  document.getElementById('ob-alm-clear').style.display='none';
+  obHighlightAlmChart();
+  obPage=1; renderObs();
+}
+
+function initObCharts(){
+  updateObCharts();
+}
+
+function updateObCharts(){
+  if(!_obChartGrupos) {
+    _obChartGrupos=new Chart(document.getElementById('ob-chart-grupos'),{
+      type:'bar',
+      data:{labels:[],datasets:[
+        {label:'D',data:[],backgroundColor:'rgba(240,136,62,0.5)',borderColor:'#f0883e',borderWidth:1},
+        {label:'E',data:[],backgroundColor:'rgba(248,81,73,0.4)',borderColor:'#f85149',borderWidth:1}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#8b949e',callback:function(v){return'$'+(v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v);}}},
+          y:{grid:{display:false},ticks:{color:'#8b949e',font:{size:10}}}
+        },
+        onClick:function(evt,els){
+          if(!els.length) return;
+          var fullLabel=_obChartGruposLabels[els[0].index];
+          var sel=document.getElementById('ob-grupo');
+          if(sel.value===fullLabel){ sel.value=''; }
+          else { sel.value=fullLabel; }
+          obHighlightChart();
+          obPage=1; renderObs();
+        }
+      }
+    });
+  }
+  if(!_obChartAlm){
+    _obChartAlm=new Chart(document.getElementById('ob-chart-alm'),{
+      type:'bar',
+      data:{labels:[],datasets:[
+        {label:'D',data:[],backgroundColor:'rgba(240,136,62,0.5)',borderColor:'#f0883e',borderWidth:1},
+        {label:'E',data:[],backgroundColor:'rgba(248,81,73,0.4)',borderColor:'#f85149',borderWidth:1}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+        plugins:{legend:{display:false},tooltip:{callbacks:{
+          title:function(items){ return _obChartAlmNames[items[0].dataIndex]||items[0].label; },
+          label:function(ctx){ return ' '+ctx.dataset.label+': '+ctx.raw.toLocaleString('es-MX')+' mats'; }
+        }}},
+        scales:{
+          x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#8b949e'}},
+          y:{grid:{display:false},ticks:{color:'#8b949e',font:{size:10}}}
+        },
+        onClick:function(evt,els){
+          if(!els.length) return;
+          var almCode=_obChartAlmCodes[els[0].index];
+          var sel=document.getElementById('ob-alm');
+          if(sel.value===almCode){ obClearAlmFilter(); return; }
+          sel.value=almCode;
+          var lbl=document.getElementById('ob-alm-active-label');
+          var btn=document.getElementById('ob-alm-clear');
+          lbl.textContent='\u25cf '+(_obChartAlmNames[els[0].index]||almCode);
+          btn.style.display='';
+          obHighlightAlmChart();
+          obPage=1; renderObs();
+        }
+      }
+    });
+  }
+
+  // --- Grupos chart data ---
+  var map={};
+  obFiltered.forEach(function(r){
+    var g=r.grupo||'Sin grupo';
+    if(!map[g]) map[g]={D_val:0,E_val:0};
+    if(r.cls_c==='D') map[g].D_val+=r.val_inm;
+    else map[g].E_val+=r.val_inm;
+  });
+  var entries=Object.entries(map).sort(function(a,b){ return (b[1].D_val+b[1].E_val)-(a[1].D_val+a[1].E_val); }).slice(0,10);
+  var gLabels=entries.map(function(e){ var l=e[0]; return l.length>22?l.substring(0,22)+'\u2026':l; });
+  _obChartGruposLabels=entries.map(function(e){ return e[0]; });
+  _obChartGrupos.data.labels=gLabels;
+  _obChartGrupos.data.datasets[0].data=entries.map(function(e){return Math.round(e[1].D_val);});
+  _obChartGrupos.data.datasets[1].data=entries.map(function(e){return Math.round(e[1].E_val);});
+  _obChartGrupos.update();
+  obHighlightChart();
+
+  // --- Almacen chart data: count materials per almacen from alms array ---
+  var almMap={};
+  obFiltered.forEach(function(r){
+    (r.alms||[]).forEach(function(a){
+      if(!almMap[a.a]) almMap[a.a]={code:a.a,name:a.n,D:0,E:0};
+      if(r.cls_c==='D') almMap[a.a].D++;
+      else almMap[a.a].E++;
+    });
+  });
+  var almEntries=Object.values(almMap).sort(function(a,b){ return (b.D+b.E)-(a.D+a.E); }).slice(0,12);
+  _obChartAlmCodes=almEntries.map(function(a){ return a.code; });
+  _obChartAlmNames=almEntries.map(function(a){ return a.name; });
+  _obChartAlm.data.labels=almEntries.map(function(a){ return a.code; });
+  _obChartAlm.data.datasets[0].data=almEntries.map(function(a){ return a.D; });
+  _obChartAlm.data.datasets[1].data=almEntries.map(function(a){ return a.E; });
+  _obChartAlm.update();
+  obHighlightAlmChart();
+}
+
+function exportObsoletos(){
+  if(!obFiltered.length) return;
+  var headers=['Material','Descripcion','Grupo','Centro','Clasificacion','Stock_Ctro','Valor_Inmovilizado','Almacenes_Stock','Ventas','Fallas','Prom_6M','Costo_Unit'];
+  var rows=obFiltered.map(function(r){
+    var almsStr=(r.alms||[]).filter(function(a){return a.s>0;}).map(function(a){return a.a+':'+a.n+'='+a.s;}).join(' | ');
+    return [r.mat,'"'+r.desc.replace(/"/g,'""')+'"','"'+r.grupo.replace(/"/g,'""')+'"',r.centro,r.cls_c,r.stk_c,r.val_inm,'"'+almsStr+'"',r.vta,r.fal,r.p6,r.costo].join(',');
+  });
+  var csv=[headers.join(',')].concat(rows).join('\n');
+  var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download='materiales_obsoletos.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---- INIT ---- */
+window.addEventListener('load', () => {
+  initMainFilters();
+  buildResumenTable();
+  buildGruposTable();
+  initCharts();
+  renderWeeks();
+  renderComments();
+  populateGrupoDropdowns();
+  cruceFiltered = MAT_ALL.filter(m=>m.cruce);
+  catFiltered = [...MAT_ALL];
+  gdInit();
+});
+
+</script>
+
+</body>
+</html>
