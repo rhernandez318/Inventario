@@ -38,6 +38,26 @@ input:focus{border-color:#d4a853}
   <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
   <div class="error" id="err"></div>
   <button class="btn" id="btn">Iniciar sesión</button>
+
+  <!-- Recovery section — shown after 3 failed attempts -->
+  <div id="recover-section" style="display:none;margin-top:20px;padding:16px;
+    background:rgba(212,168,83,.08);border:1px solid rgba(212,168,83,.3);border-radius:8px;">
+    <div style="font-size:13px;color:#d4a853;font-weight:600;margin-bottom:10px;">
+      ¿Olvidaste tu contraseña?
+    </div>
+    <div style="font-size:12px;color:#8b949e;margin-bottom:10px;">
+      Te enviaremos un enlace para restablecerla.
+    </div>
+    <input type="email" id="recover-email" placeholder="Confirma tu correo"
+      style="width:100%;padding:9px 12px;background:#0d1117;border:1px solid #30363d;
+        border-radius:7px;color:#e6edf3;font-size:13px;outline:none;margin-bottom:8px;">
+    <button id="recover-btn" onclick="sendRecovery()"
+      style="width:100%;padding:9px;background:transparent;border:1px solid #d4a853;
+        border-radius:7px;color:#d4a853;font-size:13px;font-weight:600;cursor:pointer;">
+      Enviar enlace de recuperación
+    </button>
+    <div id="recover-msg" style="font-size:12px;margin-top:8px;"></div>
+  </div>
 </div>
 <script>
 const SUPA_URL = 'https://xfikamnsweunfzkvmjqa.supabase.co';
@@ -62,6 +82,8 @@ const passEl  = document.getElementById('password');
 const btnEl   = document.getElementById('btn');
 const errEl   = document.getElementById('err');
 
+var _loginAttempts = 0;
+
 async function doLogin() {
   const email = emailEl.value.trim();
   const pass  = passEl.value;
@@ -71,13 +93,39 @@ async function doLogin() {
   errEl.style.display = 'none';
   const { error } = await sb.auth.signInWithPassword({ email, password: pass });
   if (error) {
-    showErr('Credenciales incorrectas');
+    _loginAttempts++;
     btnEl.disabled = false;
     btnEl.textContent = 'Iniciar sesión';
+    if (_loginAttempts >= 3) {
+      showErr('Credenciales incorrectas.');
+      document.getElementById('recover-section').style.display = 'block';
+      document.getElementById('recover-email').value = email;
+    } else {
+      var left = 3 - _loginAttempts;
+      showErr('Credenciales incorrectas. ' + left + ' intento' + (left===1?'':'s') + ' restante' + (left===1?'':'s') + '.');
+    }
   } else {
-    // Wait for Supabase to persist session in localStorage
     await new Promise(r => setTimeout(r, 1000));
     window.location.href = 'dashboard.html';
+  }
+}
+
+async function sendRecovery() {
+  var email = document.getElementById('recover-email').value.trim();
+  var btn   = document.getElementById('recover-btn');
+  if (!email) return;
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname.replace('login.html','reset.html'),
+  });
+  if (error) {
+    document.getElementById('recover-msg').textContent = 'Error: ' + error.message;
+    document.getElementById('recover-msg').style.color = '#f85149';
+    btn.disabled = false; btn.textContent = 'Enviar enlace de recuperación';
+  } else {
+    document.getElementById('recover-msg').textContent = '✓ Enlace enviado a ' + email + '. Revisa tu correo.';
+    document.getElementById('recover-msg').style.color = '#3fb950';
+    btn.textContent = 'Enviado ✓';
   }
 }
 function showErr(m) { errEl.textContent = m; errEl.style.display = 'block'; }
