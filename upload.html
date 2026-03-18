@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cargar Archivos SAP</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:#0d1117;color:#e6edf3;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+nav{background:#161b22;border-bottom:1px solid #30363d;padding:0 32px;
+  display:flex;align-items:center;height:56px;gap:20px}
+.nav-logo{font-weight:700;color:#d4a853;font-size:16px}
+.nav-link{font-size:13px;color:#8b949e;cursor:pointer;padding:4px 10px;
+  border-radius:6px;text-decoration:none}
+.nav-link:hover{background:rgba(255,255,255,.06);color:#e6edf3}
+.main{max-width:740px;margin:48px auto;padding:0 24px}
+h1{font-size:24px;font-weight:600;margin-bottom:8px}
+.sub{font-size:14px;color:#8b949e;margin-bottom:32px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px;margin-bottom:24px}
+.drop-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.drop{border:2px dashed #30363d;border-radius:8px;padding:28px 16px;text-align:center;cursor:pointer;transition:.2s}
+.drop:hover,.drop.over{border-color:#d4a853;background:rgba(212,168,83,.05)}
+.drop-icon{font-size:28px;margin-bottom:8px}
+.drop-hint{font-size:13px;color:#8b949e}
+.drop-hint span{color:#d4a853}
+.drop-name{font-size:12px;color:#3fb950;margin-top:8px;word-break:break-all}
+.btn{padding:12px 28px;background:#d4a853;border:none;border-radius:8px;
+  color:#0d1117;font-weight:700;font-size:14px;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.progress{height:6px;background:#21262d;border-radius:3px;margin-top:20px;overflow:hidden;display:none}
+.progress-fill{height:100%;background:#d4a853;border-radius:3px;transition:width .4s;width:0}
+.log{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:14px;
+  font-family:monospace;font-size:12px;color:#8b949e;max-height:220px;overflow-y:auto;margin-top:16px;display:none}
+.log .ok{color:#3fb950}.log .err{color:#f85149}.log .info{color:#58a6ff}
+.alert{padding:12px 16px;border-radius:8px;font-size:13px;margin-top:16px;display:none}
+.alert.ok{background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.4);color:#3fb950}
+.alert.err{background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.4);color:#f85149}
+</style>
+</head>
+<body>
+<nav>
+  <span class="nav-logo">📦 Inventario ABC</span>
+  <a class="nav-link" href="dashboard.html">← Dashboard</a>
+  <span style="margin-left:auto">
+    <a class="nav-link" id="btn-logout" href="#">Cerrar sesión</a>
+  </span>
+</nav>
+<div class="main">
+  <h1>📤 Carga de Archivos SAP</h1>
+  <p class="sub">Sube los dos exports SAP. El análisis se procesa en tu navegador y los datos quedan disponibles para todos los usuarios.</p>
+  <div class="card">
+    <div class="drop-row">
+      <div class="drop" id="drop4105" onclick="document.getElementById('f4105').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-hint">Centro <strong>4105</strong><br>Arrastra o <span>selecciona</span></div>
+        <div class="drop-name" id="n4105"></div>
+        <input type="file" id="f4105" accept=".xls,.txt,.tsv,.csv" style="display:none">
+      </div>
+      <div class="drop" id="drop4106" onclick="document.getElementById('f4106').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-hint">Centro <strong>4106</strong><br>Arrastra o <span>selecciona</span></div>
+        <div class="drop-name" id="n4106"></div>
+        <input type="file" id="f4106" accept=".xls,.txt,.tsv,.csv" style="display:none">
+      </div>
+    </div>
+    <button class="btn" id="btn-proc">⚡ Procesar y Publicar</button>
+    <div class="progress" id="prog"><div class="progress-fill" id="prog-fill"></div></div>
+    <div class="alert" id="alert-box"></div>
+    <div class="log" id="log-box"></div>
+  </div>
+</div>
+<script>
+const SUPA_URL = 'https://xfikamnsweunfzkvmjqa.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhmaWthbW5zd2V1bmZ6a3ZtanFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NzA4MDMsImV4cCI6MjA4OTM0NjgwM30.FTcYX8rc3-fW8MbDUlgU9aXgxdnV8SstnRTZIjUbT08';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY, {
+  auth: { persistSession: true, storageKey: 'inv-auth', storage: window.localStorage }
+});
+
+// Retry getSession to handle localStorage restore timing
+async function getSessionWithRetry(retries=3, delay=400) {
+  for (let i=0; i<retries; i++) {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) return session;
+    if (i < retries-1) await new Promise(r => setTimeout(r, delay));
+  }
+  return null;
+}
+
+(async () => {
+  const session = await getSessionWithRetry();
+  if (!session) { window.location.href = 'login.html'; return; }
+  const { data: p } = await sb.from('profiles').select('rol,activo').eq('id', session.user.id).single();
+  if (!p || !p.activo || p.rol !== 'admin') { window.location.href = 'dashboard.html'; }
+})();
+
+document.getElementById('btn-logout').onclick = async (e) => {
+  e.preventDefault(); await sb.auth.signOut(); window.location.href = 'login.html';
+};
+
+// File drop handling
+const files = { '4105': null, '4106': null };
+['4105','4106'].forEach(c => {
+  const drop = document.getElementById('drop'+c);
+  const inp  = document.getElementById('f'+c);
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); setFile(c, e.dataTransfer.files[0]); });
+  inp.addEventListener('change', e => { if (e.target.files[0]) setFile(c, e.target.files[0]); });
+});
+function setFile(c, f) { files[c] = f; document.getElementById('n'+c).textContent = '✓ ' + f.name; }
+
+// Logging
+function log(msg, cls='') {
+  const box = document.getElementById('log-box');
+  box.style.display = 'block';
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = '[' + new Date().toLocaleTimeString('es-MX') + '] ' + msg;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+function setProgress(p) {
+  document.getElementById('prog').style.display = 'block';
+  document.getElementById('prog-fill').style.width = p + '%';
+}
+function showAlert(msg, type) {
+  const el = document.getElementById('alert-box');
+  el.textContent = msg; el.className = 'alert ' + type; el.style.display = 'block';
+}
+
+// ── XLS Processing ──────────────────────────────────────────────
+const CLASSES    = ['A','B','C','D','E','N'];
+const MONTH_KEYS = ['C(04.2025)','C(05.2025)','C(06.2025)','C(07.2025)',
+  'C(08.2025)','C(09.2025)','C(10.2025)','C(11.2025)',
+  'C(12.2025)','C(01.2026)','C(02.2026)','C(03.2026)'];
+const MONTH_LABELS = ['Abr 25','May 25','Jun 25','Jul 25','Ago 25','Sep 25',
+  'Oct 25','Nov 25','Dic 25','Ene 26','Feb 26','Mar 26'];
+
+const cleanMat = v => { const s=String(v||'').trim(); const m=s.match(/^="?(.+?)"?$/); return m?m[1]:s; };
+const num = v => { const n=parseFloat(v); return isNaN(n)?0:n; };
+const str = v => v==null?'':String(v).trim();
+
+function parseSheet(buffer) {
+  const wb = XLSX.read(new Uint8Array(buffer), { type:'array' });
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:0, raw:true });
+}
+
+function processRows(rows4105, rows4106) {
+  const allRows = [
+    ...rows4105.map(r=>({...r,_c:'4105'})),
+    ...rows4106.map(r=>({...r,_c:'4106'})),
+  ];
+  const clsAgg={}, centroAgg={'4105':{},'4106':{}}, centroMon={'4105':{},'4106':{}};
+  CLASSES.forEach(c=>{
+    clsAgg[c]={c,mats:new Set(),valor:0,ventas:0,fallas:0,p6s:0,p12s:0,pn:0,mon:MONTH_KEYS.map(()=>0)};
+    centroAgg['4105'][c]=0; centroAgg['4106'][c]=0;
+    centroMon['4105'][c]=MONTH_KEYS.map(()=>0);
+    centroMon['4106'][c]=MONTH_KEYS.map(()=>0);
+  });
+  const matMap={}, mcMap={}, almMap={'4105':{},'4106':{}}, grpMap={};
+
+  for (const row of allRows) {
+    const centro=row._c, mat=cleanMat(row['Material']);
+    if (!mat) continue;
+    const cls=str(row['IndAABCCtro'])||'N';
+    const ck=CLASSES.includes(cls)?cls:'N';
+    const desc=str(row['Texto breve de material']);
+    const grpCode=str(row['Grupo de articulos']);
+    const grpName=str(row['Nombre del grupo de articulo']);
+    const almCode=str(row['Almacen']), almName=str(row['Nombre del almacen']);
+    const costo=num(row['Cst.Prom.']), valorTot=Math.max(0,num(row['Valor Tot.']));
+    const valorAlm=Math.max(0,num(row['Valor Alm'])), stockCtro=Math.max(0,num(row['Stock Ctro']));
+    const stockAlm=Math.max(0,num(row['Stock Alm'])), vtas=Math.max(0,num(row['Vtas.Tot.']));
+    const fallas=Math.max(0,num(row['Fallas Centro']));
+    const p6=num(row['Promedio 6 Meses']), p12=num(row['Promedio 12 Meses']);
+    const prov=str(row['Nombre Proveedor']||'');
+    const mon=MONTH_KEYS.map(k=>Math.max(0,num(row[k])));
+
+    if (almCode && !almMap[centro][almCode]) almMap[centro][almCode]={a:almCode,n:almName,c:centro};
+    if (grpName && !grpMap[grpName]) grpMap[grpName]={g:grpName,valor:0,mats:new Set(),ventas:0,fallas:0};
+
+    const mcKey=mat+'|'+centro;
+    if (!mcMap[mcKey]) {
+      mcMap[mcKey]={mat,desc,grupo:grpName,grp:grpCode,centro,cls_c:ck,
+        costo,stk_c:stockCtro,vta:vtas,fal:fallas,p6,p12,proveedor:prov,alms:[]};
+      clsAgg[ck].mats.add(mcKey); centroAgg[centro][ck]+=valorTot;
+      clsAgg[ck].valor+=valorTot; clsAgg[ck].ventas+=vtas; clsAgg[ck].fallas+=fallas;
+      clsAgg[ck].p6s+=p6; clsAgg[ck].p12s+=p12; clsAgg[ck].pn++;
+      mon.forEach((v,i)=>{ clsAgg[ck].mon[i]+=v; centroMon[centro][ck][i]+=v; });
+      if (grpName) { grpMap[grpName].valor+=valorTot; grpMap[grpName].mats.add(mcKey); grpMap[grpName].ventas+=vtas; grpMap[grpName].fallas+=fallas; }
+    }
+    mcMap[mcKey].alms.push({a:almCode,n:almName,s:stockAlm,v:Math.round(valorAlm*100)/100});
+
+    if (!matMap[mat]) matMap[mat]={mat,desc,grupo:grpName,grp_code:grpCode,cls5:'—',cls6:'—',cruce:false,costo:0,valor:0,stk5:0,stk6:0,vta5:0,vta6:0,fal5:0,fal6:0,prom6:0,prom12:0,proveedor:prov};
+    const mm=matMap[mat];
+    if (centro==='4105'){mm.cls5=ck;mm.stk5=stockCtro;mm.vta5=vtas;mm.fal5=fallas;mm.valor+=valorTot;}
+    else{mm.cls6=ck;mm.stk6=stockCtro;mm.vta6=vtas;mm.fal6=fallas;mm.valor+=valorTot;}
+    mm.costo=Math.max(mm.costo,costo); mm.prom6=Math.max(mm.prom6,p6); mm.prom12=Math.max(mm.prom12,p12);
+  }
+
+  const low=['D','E'], high=['A','B'];
+  const matAll=Object.values(matMap).map(m=>({...m,cruce:(low.includes(m.cls5)&&high.includes(m.cls6))||(low.includes(m.cls6)&&high.includes(m.cls5))}));
+  const gdRows=Object.values(mcMap).map(r=>({mat:r.mat,desc:r.desc,grupo:r.grupo,grp:r.grp,centro:r.centro,cls_c:r.cls_c,costo:Math.round(r.costo*100)/100,stk_c:r.stk_c,vta:r.vta,fal:r.fal,p6:r.p6,p12:r.p12,proveedor:r.proveedor,alms:r.alms}));
+  const gdAlms=[];
+  ['4105','4106'].forEach(c=>Object.values(almMap[c]).sort((a,b)=>a.a.localeCompare(b.a)).forEach(a=>gdAlms.push(a)));
+
+  const dataCls=CLASSES.map(c=>{const a=clsAgg[c],n=a.pn||1;return{c,mats:a.mats.size,valor:Math.round(a.valor),stock:0,ventas:a.ventas,fallas:a.fallas,p6:Math.round(a.p6s/n*10)/10,p12:Math.round(a.p12s/n*10)/10};});
+  const dataGrupos=Object.values(grpMap).map(g=>({g:g.g,mats:g.mats.size,valor:Math.round(g.valor),ventas:g.ventas,fallas:g.fallas})).sort((a,b)=>b.valor-a.valor).slice(0,15);
+  const dataCentros={'4105':{},'4106':{}};
+  CLASSES.forEach(c=>{dataCentros['4105'][c]=Math.round(centroAgg['4105'][c]);dataCentros['4106'][c]=Math.round(centroAgg['4106'][c]);});
+  const fMon={'4105':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4105'][c]])),'4106':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4106'][c]]))};
+  const fAlm={'4105':Object.values(almMap['4105']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n})),'4106':Object.values(almMap['4106']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n}))};
+  const totalVal=dataCls.reduce((s,d)=>s+d.valor,0);
+  return {
+    DATA:{cls:dataCls,months:MONTH_LABELS,monthly:Object.fromEntries(CLASSES.map(c=>[c,clsAgg[c].mon])),grupos:dataGrupos,centros:dataCentros},
+    MAT_ALL:matAll, GDATA:{rows:gdRows,almacenes:gdAlms,grupos:Object.keys(grpMap).sort()},
+    FILTER_DATA:{monthly:fMon,almacenes:fAlm},
+    summary:{total_materiales:matAll.length,total_skus:gdRows.length,valor_total:totalVal,procesado_en:new Date().toISOString()},
+  };
+}
+
+// ── Process button ──────────────────────────────────────────────
+document.getElementById('btn-proc').onclick = async () => {
+  if (!files['4105']||!files['4106']) { showAlert('Selecciona ambos archivos','err'); return; }
+  const btn=document.getElementById('btn-proc');
+  btn.disabled=true; btn.textContent='⏳ Procesando…';
+  document.getElementById('alert-box').style.display='none';
+  document.getElementById('log-box').innerHTML='';
+
+  try {
+    const {data:{session}}=await sb.auth.getSession();
+    if (!session) throw new Error('Sesión expirada');
+
+    log('Leyendo archivos…','info'); setProgress(10);
+    const buf4105=await files['4105'].arrayBuffer();
+    const buf4106=await files['4106'].arrayBuffer();
+
+    log('Parseando Centro 4105…','info'); setProgress(20);
+    const rows4105=parseSheet(buf4105);
+    log('✓ '+rows4105.length.toLocaleString('es-MX')+' filas en 4105','ok'); setProgress(35);
+
+    log('Parseando Centro 4106…','info');
+    const rows4106=parseSheet(buf4106);
+    log('✓ '+rows4106.length.toLocaleString('es-MX')+' filas en 4106','ok'); setProgress(50);
+
+    log('Calculando clasificación ABC…','info');
+    const result=processRows(rows4105,rows4106);
+    log('✓ '+result.summary.total_skus.toLocaleString('es-MX')+' SKUs','ok');
+    log('✓ Valor: $'+(result.summary.valor_total/1e6).toFixed(1)+'M MXN','ok'); setProgress(70);
+
+    log('Subiendo a Supabase Storage…','info');
+    const ts=new Date().toISOString().replace(/[:.]/g,'-');
+    const path='snapshots/dashboard-'+ts+'.json';
+    const blob=new Blob([JSON.stringify(result)],{type:'application/json'});
+    const {error:upErr}=await sb.storage.from('dashboard-data').upload(path,blob,{contentType:'application/json',upsert:false});
+    if (upErr) throw new Error('Error subiendo: '+upErr.message);
+    setProgress(85);
+
+    log('Registrando snapshot…','info');
+    await sb.from('dashboard_snapshots').update({is_active:false}).eq('is_active',true);
+    const {error:insErr}=await sb.from('dashboard_snapshots').insert({
+      storage_path:path, filename_4105:files['4105'].name, filename_4106:files['4106'].name,
+      processed_by:session.user.id, row_count:result.summary.total_skus,
+      is_active:true, summary:result.summary,
+    });
+    if (insErr) throw new Error('Error registrando: '+insErr.message);
+    setProgress(100);
+
+    log('✓ Dashboard actualizado para todos los usuarios','ok');
+    showAlert('✓ Procesado: '+result.summary.total_skus.toLocaleString('es-MX')+' SKUs · $'+(result.summary.valor_total/1e6).toFixed(1)+'M MXN','ok');
+  } catch(err) {
+    log('✗ '+err.message,'err'); showAlert('✗ '+err.message,'err');
+  } finally {
+    btn.disabled=false; btn.textContent='⚡ Procesar y Publicar';
+  }
+};
+</script>
+</body>
+</html>
