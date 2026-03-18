@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nueva Contraseña — Inventario ABC</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#e6edf3}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:40px 36px;width:100%;max-width:420px}
+.logo{text-align:center;margin-bottom:32px}
+.logo-icon{font-size:36px;margin-bottom:12px}
+.logo-title{font-size:20px;font-weight:600}
+.logo-sub{font-size:13px;color:#8b949e;margin-top:4px}
+label{display:block;font-size:12px;color:#8b949e;margin-bottom:6px;margin-top:20px}
+input{width:100%;padding:10px 14px;background:#0d1117;border:1px solid #30363d;
+  border-radius:8px;color:#e6edf3;font-size:14px;outline:none;transition:border-color .2s}
+input:focus{border-color:#d4a853}
+.req{font-size:11px;color:#8b949e;margin-top:5px}
+.btn{width:100%;margin-top:24px;padding:12px;background:#d4a853;border:none;
+  border-radius:8px;color:#0d1117;font-weight:700;font-size:15px;cursor:pointer;transition:opacity .2s}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.msg{margin-top:16px;padding:12px 14px;border-radius:8px;font-size:13px;display:none}
+.msg.ok{background:rgba(63,185,80,.15);border:1px solid rgba(63,185,80,.4);color:#3fb950}
+.msg.err{background:rgba(248,81,73,.15);border:1px solid rgba(248,81,73,.4);color:#f85149}
+.msg.info{background:rgba(88,166,255,.12);border:1px solid rgba(88,166,255,.3);color:#58a6ff}
+.strength{height:4px;border-radius:2px;margin-top:8px;transition:all .3s;background:#21262d}
+.strength-fill{height:100%;border-radius:2px;transition:all .3s;width:0}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">🔑</div>
+    <div class="logo-title">Nueva Contraseña</div>
+    <div class="logo-sub">Inventario ABC · Distribuidoras</div>
+  </div>
+
+  <div id="loading-state">
+    <div class="msg info" style="display:block">Verificando enlace de recuperación…</div>
+  </div>
+
+  <div id="form-state" style="display:none">
+    <label>Nueva contraseña</label>
+    <input type="password" id="pass1" placeholder="Mínimo 8 caracteres" oninput="checkStrength()">
+    <div class="strength"><div class="strength-fill" id="strength-fill"></div></div>
+    <div class="req" id="strength-label">Ingresa tu nueva contraseña</div>
+
+    <label>Confirmar contraseña</label>
+    <input type="password" id="pass2" placeholder="Repite la contraseña">
+
+    <div class="msg" id="form-msg"></div>
+    <button class="btn" id="btn-save" onclick="savePassword()">Guardar nueva contraseña</button>
+  </div>
+
+  <div id="error-state" style="display:none">
+    <div class="msg err" style="display:block" id="error-msg">El enlace es inválido o ha expirado.</div>
+    <a href="login.html" style="display:block;text-align:center;margin-top:20px;color:#d4a853;font-size:14px;">
+      ← Volver al login
+    </a>
+  </div>
+
+  <div id="success-state" style="display:none">
+    <div class="msg ok" style="display:block">
+      ✓ Contraseña actualizada correctamente.<br>
+      <span style="color:#8b949e;font-size:12px;">Redirigiendo al login…</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPA_URL = 'https://xfikamnsweunfzkvmjqa.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhmaWthbW5zd2V1bmZ6a3ZtanFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NzA4MDMsImV4cCI6MjA4OTM0NjgwM30.FTcYX8rc3-fW8MbDUlgU9aXgxdnV8SstnRTZIjUbT08';
+
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY, {
+  auth: { persistSession: true, storageKey: 'inv-auth', storage: window.localStorage }
+});
+
+function show(id) {
+  ['loading-state','form-state','error-state','success-state'].forEach(function(s) {
+    document.getElementById(s).style.display = s === id ? 'block' : 'none';
+  });
+}
+
+function showFormMsg(msg, type) {
+  var el = document.getElementById('form-msg');
+  el.textContent = msg; el.className = 'msg ' + type; el.style.display = 'block';
+}
+
+function checkStrength() {
+  var p = document.getElementById('pass1').value;
+  var fill = document.getElementById('strength-fill');
+  var label = document.getElementById('strength-label');
+  var score = 0;
+  if (p.length >= 8)  score++;
+  if (p.length >= 12) score++;
+  if (/[A-Z]/.test(p)) score++;
+  if (/[0-9]/.test(p)) score++;
+  if (/[^A-Za-z0-9]/.test(p)) score++;
+  var colors = ['','#f85149','#f0883e','#d4a853','#3fb950','#3fb950'];
+  var labels = ['','Muy débil','Débil','Regular','Fuerte','Muy fuerte'];
+  var pcts   = [0, 20, 40, 65, 85, 100];
+  fill.style.width   = pcts[score] + '%';
+  fill.style.background = colors[score] || '#21262d';
+  label.textContent  = p.length ? labels[score] : 'Ingresa tu nueva contraseña';
+}
+
+async function savePassword() {
+  var p1 = document.getElementById('pass1').value;
+  var p2 = document.getElementById('pass2').value;
+  var btn = document.getElementById('btn-save');
+
+  if (p1.length < 8) { showFormMsg('La contraseña debe tener al menos 8 caracteres', 'err'); return; }
+  if (p1 !== p2)     { showFormMsg('Las contraseñas no coinciden', 'err'); return; }
+
+  btn.disabled = true; btn.textContent = 'Guardando…';
+
+  var { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) {
+    showFormMsg('Error: ' + error.message, 'err');
+    btn.disabled = false; btn.textContent = 'Guardar nueva contraseña';
+  } else {
+    show('success-state');
+    await sb.auth.signOut();
+    setTimeout(function() { window.location.href = 'login.html'; }, 2500);
+  }
+}
+
+// On load: Supabase puts the token in the URL hash as #access_token=...&type=recovery
+// onAuthStateChange fires with event PASSWORD_RECOVERY when the token is valid
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'PASSWORD_RECOVERY') {
+    show('form-state');
+  } else if (event === 'SIGNED_IN' && window.location.hash.includes('type=recovery')) {
+    show('form-state');
+  }
+});
+
+// Fallback: check hash manually
+(function() {
+  var hash = window.location.hash;
+  if (!hash) {
+    // No hash — show error after brief wait (in case onAuthStateChange fires)
+    setTimeout(function() {
+      var loading = document.getElementById('loading-state');
+      if (loading.style.display !== 'none') show('error-state');
+    }, 3000);
+    return;
+  }
+  // If hash has access_token and type=recovery, onAuthStateChange will handle it
+  // Otherwise show error
+  if (!hash.includes('access_token')) {
+    show('error-state');
+  }
+})();
+</script>
+</body>
+</html>

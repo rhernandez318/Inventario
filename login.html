@@ -48,6 +48,11 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY, {
 });
 
 // Si ya hay sesión → dashboard
+// Si llega con token de recuperación, redirigir a reset.html
+if (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token')) {
+  window.location.href = 'reset.html' + window.location.hash;
+}
+
 sb.auth.getSession().then(({ data: { session } }) => {
   if (session) window.location.href = 'dashboard.html';
 });
