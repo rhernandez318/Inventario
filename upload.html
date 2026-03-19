@@ -192,7 +192,11 @@ function processRows(rows4105, rows4106) {
       mon.forEach((v,i)=>{ clsAgg[ck].mon[i]+=v; centroMon[centro][ck][i]+=v; });
       if (grpName) { grpMap[grpName].valor+=valorTot; grpMap[grpName].mats.add(mcKey); grpMap[grpName].ventas+=vtas; grpMap[grpName].fallas+=fallas; }
     }
-    mcMap[mcKey].alms.push({a:almCode,n:almName,s:stockAlm,v:Math.round(valorAlm*100)/100});
+    const clsAlm  = str(row['IndABCAlm']) || '';
+    const vtasAlm = Math.max(0,num(row['Vtas.Tot.']));
+    const p6alm   = num(row['Promedio 6 Meses']);
+    const p12alm  = num(row['Promedio 12 Meses']);
+    mcMap[mcKey].alms.push({a:almCode,n:almName,s:stockAlm,v:Math.round(valorAlm*100)/100,cls:clsAlm,vta:vtasAlm,p6:p6alm,p12:p12alm});
 
     if (!matMap[mat]) matMap[mat]={mat,desc,grupo:grpName,grp_code:grpCode,cls5:'—',cls6:'—',cruce:false,costo:0,valor:0,stk5:0,stk6:0,vta5:0,vta6:0,fal5:0,fal6:0,prom6:0,prom12:0,proveedor:prov};
     const mm=matMap[mat];
