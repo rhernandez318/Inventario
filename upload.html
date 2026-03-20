@@ -269,6 +269,7 @@ document.getElementById('btn-proc').onclick = async () => {
       storage_path:path, filename_4105:files['4105'].name, filename_4106:files['4106'].name,
       processed_by:session.user.id, row_count:result.summary.total_skus,
       is_active:true, summary:result.summary,
+      processed_at: new Date().toISOString(),
     });
     if (insErr) throw new Error('Error registrando: '+insErr.message);
     setProgress(100);
