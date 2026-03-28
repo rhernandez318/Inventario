@@ -169,7 +169,7 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
     ...rows4111.map(r=>({...r,_c:'4111'})),
     ...rows4113.map(r=>({...r,_c:'4113'})),
   ];
-  const clsAgg={}, centroAgg={'4105':{},'4106':{},'4111':{},'4113':{}}, centroMon={'4105':{},'4106':{}};
+  const clsAgg={}, centroAgg={'4105':{},'4106':{},'4111':{},'4113':{}}, centroMon={'4105':{},'4106':{},'4111':{},'4113':{}};
   CLASSES.forEach(c=>{
     clsAgg[c]={c,mats:new Set(),valor:0,ventas:0,fallas:0,p6s:0,p12s:0,pn:0,mon:MONTH_KEYS.map(()=>0)};
     centroAgg['4105'][c]=0; centroAgg['4106'][c]=0; centroAgg['4111'][c]=0; centroAgg['4113'][c]=0;
