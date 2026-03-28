@@ -181,7 +181,7 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
   const matMap={}, mcMap={}, almMap={'4105':{},'4106':{},'4111':{},'4113':{}}, grpMap={};
 
   for (const row of allRows) {
-    const centro=row._c, mat=cleanMat(row['Material']);
+    const centro=String(row._c), mat=cleanMat(row['Material']);
     if (!mat) continue;
     const cls=str(row['IndAABCCtro'])||'N';
     const ck=CLASSES.includes(cls)?cls:'N';
