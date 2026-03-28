@@ -52,7 +52,7 @@ h1{font-size:24px;font-weight:600;margin-bottom:8px}
   <h1>📤 Carga de Archivos SAP</h1>
   <p class="sub">Sube los dos exports SAP. El análisis se procesa en tu navegador y los datos quedan disponibles para todos los usuarios.</p>
   <div class="card">
-    <div class="drop-row">
+    <div class="drop-row" style="grid-template-columns:repeat(4,1fr);">
       <div class="drop" id="drop4105" onclick="document.getElementById('f4105').click()">
         <div class="drop-icon">📂</div>
         <div class="drop-hint">Centro <strong>4105</strong><br>Arrastra o <span>selecciona</span></div>
@@ -64,6 +64,18 @@ h1{font-size:24px;font-weight:600;margin-bottom:8px}
         <div class="drop-hint">Centro <strong>4106</strong><br>Arrastra o <span>selecciona</span></div>
         <div class="drop-name" id="n4106"></div>
         <input type="file" id="f4106" accept=".xls,.txt,.tsv,.csv" style="display:none">
+      </div>
+      <div class="drop" id="drop4111" onclick="document.getElementById('f4111').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-hint">Centro <strong>4111</strong><br>Arrastra o <span>selecciona</span></div>
+        <div class="drop-name" id="n4111"></div>
+        <input type="file" id="f4111" accept=".xls,.txt,.tsv,.csv" style="display:none">
+      </div>
+      <div class="drop" id="drop4113" onclick="document.getElementById('f4113').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-hint">Centro <strong>4113</strong><br>Arrastra o <span>selecciona</span></div>
+        <div class="drop-name" id="n4113"></div>
+        <input type="file" id="f4113" accept=".xls,.txt,.tsv,.csv" style="display:none">
       </div>
     </div>
     <button class="btn" id="btn-proc">⚡ Procesar y Publicar</button>
@@ -101,8 +113,8 @@ document.getElementById('btn-logout').onclick = async (e) => {
 };
 
 // File drop handling
-const files = { '4105': null, '4106': null };
-['4105','4106'].forEach(c => {
+const files = { '4105': null, '4106': null, '4111': null, '4113': null };
+['4105','4106','4111','4113'].forEach(c => {
   const drop = document.getElementById('drop'+c);
   const inp  = document.getElementById('f'+c);
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
@@ -148,12 +160,16 @@ function parseSheet(buffer) {
   return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:0, raw:true });
 }
 
-function processRows(rows4105, rows4106) {
+function processRows(rows4105, rows4106, rows4111, rows4113) {
+  rows4111 = rows4111 || [];
+  rows4113 = rows4113 || [];
   const allRows = [
     ...rows4105.map(r=>({...r,_c:'4105'})),
     ...rows4106.map(r=>({...r,_c:'4106'})),
+    ...rows4111.map(r=>({...r,_c:'4111'})),
+    ...rows4113.map(r=>({...r,_c:'4113'})),
   ];
-  const clsAgg={}, centroAgg={'4105':{},'4106':{}}, centroMon={'4105':{},'4106':{}};
+  const clsAgg={}, centroAgg={'4105':{},'4106':{},'4111':{},'4113':{}}, centroMon={'4105':{},'4106':{}};
   CLASSES.forEach(c=>{
     clsAgg[c]={c,mats:new Set(),valor:0,ventas:0,fallas:0,p6s:0,p12s:0,pn:0,mon:MONTH_KEYS.map(()=>0)};
     centroAgg['4105'][c]=0; centroAgg['4106'][c]=0;
@@ -228,7 +244,8 @@ function processRows(rows4105, rows4106) {
 
 // ── Process button ──────────────────────────────────────────────
 document.getElementById('btn-proc').onclick = async () => {
-  if (!files['4105']||!files['4106']) { showAlert('Selecciona ambos archivos','err'); return; }
+  var missingCenters = ['4105','4106','4111','4113'].filter(function(c){ return !files[c]; });
+  if (missingCenters.length) { showAlert('Faltan archivos: Centro ' + missingCenters.join(', '),'err'); return; }
   const btn=document.getElementById('btn-proc');
   btn.disabled=true; btn.textContent='⏳ Procesando…';
   document.getElementById('alert-box').style.display='none';
@@ -238,20 +255,22 @@ document.getElementById('btn-proc').onclick = async () => {
     const {data:{session}}=await sb.auth.getSession();
     if (!session) throw new Error('Sesión expirada');
 
-    log('Leyendo archivos…','info'); setProgress(10);
-    const buf4105=await files['4105'].arrayBuffer();
-    const buf4106=await files['4106'].arrayBuffer();
-
-    log('Parseando Centro 4105…','info'); setProgress(20);
-    const rows4105=parseSheet(buf4105);
-    log('✓ '+rows4105.length.toLocaleString('es-MX')+' filas en 4105','ok'); setProgress(35);
-
-    log('Parseando Centro 4106…','info');
-    const rows4106=parseSheet(buf4106);
-    log('✓ '+rows4106.length.toLocaleString('es-MX')+' filas en 4106','ok'); setProgress(50);
+    log('Leyendo archivos…','info'); setProgress(5);
+    var centroRows = {};
+    var centros = ['4105','4106','4111','4113'];
+    var step = 0;
+    for (var ci=0; ci<centros.length; ci++) {
+      var c = centros[ci];
+      log('Parseando Centro '+c+'…','info');
+      var buf = await files[c].arrayBuffer();
+      centroRows[c] = parseSheet(buf);
+      step += 15;
+      log('✓ '+centroRows[c].length.toLocaleString('es-MX')+' filas en '+c,'ok');
+      setProgress(5 + step);
+    }
 
     log('Calculando clasificación ABC…','info');
-    const result=processRows(rows4105,rows4106);
+    const result=processRows(centroRows['4105'],centroRows['4106'],centroRows['4111'],centroRows['4113']);
     log('✓ '+result.summary.total_skus.toLocaleString('es-MX')+' SKUs','ok');
     log('✓ Valor: $'+(result.summary.valor_total/1e6).toFixed(1)+'M MXN','ok'); setProgress(70);
 
@@ -273,7 +292,7 @@ document.getElementById('btn-proc').onclick = async () => {
       await sb.storage.from('dashboard-data').remove(oldPaths);
     }
     const {error:insErr}=await sb.from('dashboard_snapshots').insert({
-      storage_path:path, filename_4105:files['4105'].name, filename_4106:files['4106'].name,
+      storage_path:path, filename_4105:files['4105'].name, filename_4106:files['4106'].name, filename_4111:files['4111']?files['4111'].name:'', filename_4113:files['4113']?files['4113'].name:'',
       processed_by:session.user.id, row_count:result.summary.total_skus,
       is_active:true, summary:result.summary,
       processed_at: new Date().toISOString(),
