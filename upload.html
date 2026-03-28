@@ -172,11 +172,13 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
   const clsAgg={}, centroAgg={'4105':{},'4106':{},'4111':{},'4113':{}}, centroMon={'4105':{},'4106':{}};
   CLASSES.forEach(c=>{
     clsAgg[c]={c,mats:new Set(),valor:0,ventas:0,fallas:0,p6s:0,p12s:0,pn:0,mon:MONTH_KEYS.map(()=>0)};
-    centroAgg['4105'][c]=0; centroAgg['4106'][c]=0;
+    centroAgg['4105'][c]=0; centroAgg['4106'][c]=0; centroAgg['4111'][c]=0; centroAgg['4113'][c]=0;
     centroMon['4105'][c]=MONTH_KEYS.map(()=>0);
     centroMon['4106'][c]=MONTH_KEYS.map(()=>0);
+    centroMon['4111'][c]=MONTH_KEYS.map(()=>0);
+    centroMon['4113'][c]=MONTH_KEYS.map(()=>0);
   });
-  const matMap={}, mcMap={}, almMap={'4105':{},'4106':{}}, grpMap={};
+  const matMap={}, mcMap={}, almMap={'4105':{},'4106':{},'4111':{},'4113':{}}, grpMap={};
 
   for (const row of allRows) {
     const centro=row._c, mat=cleanMat(row['Material']);
@@ -230,7 +232,7 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
   const dataCls=CLASSES.map(c=>{const a=clsAgg[c],n=a.pn||1;return{c,mats:a.mats.size,valor:Math.round(a.valor),stock:0,ventas:a.ventas,fallas:a.fallas,p6:Math.round(a.p6s/n*10)/10,p12:Math.round(a.p12s/n*10)/10};});
   const dataGrupos=Object.values(grpMap).map(g=>({g:g.g,mats:g.mats.size,valor:Math.round(g.valor),ventas:g.ventas,fallas:g.fallas})).sort((a,b)=>b.valor-a.valor).slice(0,15);
   const dataCentros={'4105':{},'4106':{}};
-  CLASSES.forEach(c=>{dataCentros['4105'][c]=Math.round(centroAgg['4105'][c]);dataCentros['4106'][c]=Math.round(centroAgg['4106'][c]);});
+  CLASSES.forEach(c=>{dataCentros['4105'][c]=Math.round(centroAgg['4105'][c]);dataCentros['4106'][c]=Math.round(centroAgg['4106'][c]);dataCentros['4111'][c]=Math.round(centroAgg['4111'][c]);dataCentros['4113'][c]=Math.round(centroAgg['4113'][c]);});
   const fMon={'4105':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4105'][c]])),'4106':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4106'][c]]))};
   const fAlm={'4105':Object.values(almMap['4105']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n})),'4106':Object.values(almMap['4106']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n}))};
   const totalVal=dataCls.reduce((s,d)=>s+d.valor,0);
