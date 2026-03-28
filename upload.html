@@ -204,10 +204,10 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
     if (!mcMap[mcKey]) {
       mcMap[mcKey]={mat,desc,grupo:grpName,grp:grpCode,centro,cls_c:ck,
         costo,stk_c:stockCtro,vta:vtas,fal:fallas,p6,p12,proveedor:prov,alms:[]};
-      clsAgg[ck].mats.add(mcKey); centroAgg[centro][ck]+=valorTot;
+      clsAgg[ck].mats.add(mcKey); if(centroAgg[centro]) centroAgg[centro][ck]+=valorTot;
       clsAgg[ck].valor+=valorTot; clsAgg[ck].ventas+=vtas; clsAgg[ck].fallas+=fallas;
       clsAgg[ck].p6s+=p6; clsAgg[ck].p12s+=p12; clsAgg[ck].pn++;
-      mon.forEach((v,i)=>{ clsAgg[ck].mon[i]+=v; centroMon[centro][ck][i]+=v; });
+      mon.forEach((v,i)=>{ clsAgg[ck].mon[i]+=v; if(centroMon[centro] && centroMon[centro][ck]) centroMon[centro][ck][i]+=v; });
       if (grpName) { grpMap[grpName].valor+=valorTot; grpMap[grpName].mats.add(mcKey); grpMap[grpName].ventas+=vtas; grpMap[grpName].fallas+=fallas; }
     }
     const clsAlm  = str(row['IndABCAlm']) || '';
@@ -233,8 +233,8 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
   const dataGrupos=Object.values(grpMap).map(g=>({g:g.g,mats:g.mats.size,valor:Math.round(g.valor),ventas:g.ventas,fallas:g.fallas})).sort((a,b)=>b.valor-a.valor).slice(0,15);
   const dataCentros={'4105':{},'4106':{}};
   CLASSES.forEach(c=>{dataCentros['4105'][c]=Math.round(centroAgg['4105'][c]);dataCentros['4106'][c]=Math.round(centroAgg['4106'][c]);dataCentros['4111'][c]=Math.round(centroAgg['4111'][c]);dataCentros['4113'][c]=Math.round(centroAgg['4113'][c]);});
-  const fMon={'4105':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4105'][c]])),'4106':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4106'][c]]))};
-  const fAlm={'4105':Object.values(almMap['4105']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n})),'4106':Object.values(almMap['4106']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n}))};
+  const fMon={'4105':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4105'][c]])),'4106':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4106'][c]])),'4111':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4111'][c]])),'4113':Object.fromEntries(CLASSES.map(c=>[c,centroMon['4113'][c]]))};
+  const fAlm={'4105':Object.values(almMap['4105']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n})),'4106':Object.values(almMap['4106']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n})),'4111':Object.values(almMap['4111']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n})),'4113':Object.values(almMap['4113']).sort((a,b)=>a.a.localeCompare(b.a)).map(a=>({a:a.a,n:a.n}))};
   const totalVal=dataCls.reduce((s,d)=>s+d.valor,0);
   return {
     DATA:{cls:dataCls,months:MONTH_LABELS,monthly:Object.fromEntries(CLASSES.map(c=>[c,clsAgg[c].mon])),grupos:dataGrupos,centros:dataCentros},
