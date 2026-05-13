@@ -1769,29 +1769,31 @@
       </div>
     </div>
 
-    <!-- Tabla detalle -->
-    <div class="panel" id="flujo-table-panel" style="display:none;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div class="panel-title">Detalle por Mes × Clasificación × Almacén</div>
-        <span class="filter-results" id="flujo-table-count"></span>
+    <!-- Tabla 1: Top Grupos por Valor en Rango -->
+    <div class="panel" id="flujo-table-panel" style="display:none;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div class="panel-title" id="flujo-t1-title">Top Clasificaciones por Valor en Rango</div>
+          <div style="font-size:11px;color:var(--text3);">Valor de inventario comprado en el período seleccionado · por grupo de artículo</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="filter-results" id="flujo-table-count"></span>
+          <button onclick="flujoExport()" style="padding:5px 12px;background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-size:12px;cursor:pointer;">↓ CSV</button>
+        </div>
       </div>
-      <div class="mat-table-wrap">
-        <table class="mat-table">
-          <thead>
-            <tr>
-              <th onclick="flujoSort('mes')">Mes Recepción ↕</th>
-              <th onclick="flujoSort('cls')">Cls ↕</th>
-              <th>Almacén</th>
-              <th>Centro</th>
-              <th style="text-align:right" onclick="flujoSort('valor')">Valor Inv ↕</th>
-              <th style="text-align:right">% del Total</th>
-              <th style="text-align:right" onclick="flujoSort('piezas')">Piezas ↕</th>
-              <th style="text-align:right" onclick="flujoSort('mats')">Materiales ↕</th>
-              <th style="text-align:right" onclick="flujoSort('dias')">Días inv ↕</th>
-            </tr>
-          </thead>
-          <tbody id="flujo-tbody"></tbody>
-        </table>
+      <div class="mat-table-wrap" style="overflow-x:auto;">
+        <table class="mat-table" id="flujo-t1"></table>
+      </div>
+    </div>
+
+    <!-- Tabla 2: Inventario histórico vs Comprado en rango por almacén -->
+    <div class="panel" id="flujo-table2-panel" style="display:none;">
+      <div style="margin-bottom:12px;">
+        <div class="panel-title" id="flujo-t2-title">Inventario Total Histórico vs Comprado en Rango</div>
+        <div style="font-size:11px;color:var(--text3);">Comparativo por almacén · clasificación ABC</div>
+      </div>
+      <div class="mat-table-wrap" style="overflow-x:auto;">
+        <table class="mat-table" id="flujo-t2"></table>
       </div>
     </div>
   </div>
@@ -3226,6 +3228,7 @@ function flujoApply() {
 
   // Aggregate from GD_ROWS alms with fecha_rec
   var grouped = {};  // key = mes|cls|alm|centro
+  var grupoMesAgg = {};  // grupo×mes aggregation for table 1
   var totalVal = 0, totalPiezas = 0, matSet = new Set();
 
   GD_ROWS.forEach(function(r) {
@@ -3249,7 +3252,7 @@ function flujoApply() {
 
       if (!grouped[key]) {
         grouped[key] = { mes: mes, cls: r.cls_c||'N', alm: a.a, almNom: a.n||a.a,
-          centro: r.centro, valor: 0, piezas: 0, mats: 0, diasSum: 0, matSet: new Set() };
+          centro: r.centro, grupo: r.grupo||'SIN GRUPO', valor: 0, piezas: 0, mats: 0, diasSum: 0, matSet: new Set() };
       }
       grouped[key].valor  += valor;
       grouped[key].piezas += a.s || 0;
@@ -3258,9 +3261,15 @@ function flujoApply() {
       totalVal    += valor;
       totalPiezas += a.s || 0;
       matSet.add(r.mat);
+
+      // Track grupo×mes aggregation for Table 1
+      var gkey = (r.grupo||'SIN GRUPO')+'||'+mes;
+      if (!grupoMesAgg[gkey]) grupoMesAgg[gkey] = { grupo: r.grupo||'SIN GRUPO', mes: mes, valor: 0 };
+      grupoMesAgg[gkey].valor += valor;
     });
   });
 
+  window._flujoGrupoMesAgg = grupoMesAgg;
   _flujoData = Object.values(grouped).map(function(g) {
     return {
       mes:    g.mes,
@@ -3313,7 +3322,7 @@ function flujoRenderCharts(totalVal) {
   var CLS_COLORS = { A:'#d4a853', B:'#58a6ff', C:'#3fb950', D:'#f0883e', E:'#f85149', N:'#8b949e' };
 
   // ── Chart 1: Valor por mes (stacked by cls) ───────────────────
-  var meses    = [...new Set(_flujoData.map(function(r){ return r.mes; }))].sort();
+  var meses    = [...new Set(Object.values(window._flujoGrupoMesAgg||{}).map(function(r){ return r.mes; }))].sort();
   var clases   = ['A','B','C','D','E','N'];
   var datasets = clases.map(function(c) {
     return {
@@ -3418,31 +3427,191 @@ function flujoRenderCharts(totalVal) {
 }
 
 function flujoRenderTable(totalVal) {
-  _flujoFiltered = _flujoData.slice().sort(function(a,b) {
-    var va = a[_flujoSortKey], vb = b[_flujoSortKey];
-    return _flujoSortAsc ? (va > vb ? 1 : -1) : (vb > va ? 1 : -1);
+  // ── TABLE 1: Top grupos por mes ─────────────────────────────────
+  // Get months in range sorted
+  var meses = [...new Set(_flujoData.map(function(r){ return r.mes; }))].sort();
+
+  // Aggregate by grupo × mes from pre-computed map
+  var grupoMes = {};
+  var mesTotal  = {};
+  var grandTotal = 0;
+
+  Object.values(window._flujoGrupoMesAgg || {}).forEach(function(g) {
+    if (!grupoMes[g.grupo]) grupoMes[g.grupo] = { total: 0 };
+    grupoMes[g.grupo][g.mes] = (grupoMes[g.grupo][g.mes] || 0) + g.valor;
+    grupoMes[g.grupo].total  += g.valor;
+    mesTotal[g.mes] = (mesTotal[g.mes] || 0) + g.valor;
+    grandTotal += g.valor;
   });
 
-  document.getElementById('flujo-table-count').textContent = _flujoFiltered.length.toLocaleString('es-MX') + ' registros';
+  // Sort grupos by total desc, top 15 + Resto
+  var grupoRows = Object.keys(grupoMes).map(function(g) {
+    return { grupo: g, total: grupoMes[g].total, data: grupoMes[g] };
+  }).sort(function(a,b){ return b.total - a.total; });
 
-  var CLS_COLORS = { A:'var(--gold)', B:'#58a6ff', C:'#3fb950', D:'#f0883e', E:'#f85149', N:'#8b949e' };
+  var TOP_N = 15;
+  var topRows  = grupoRows.slice(0, TOP_N);
+  var restoVal = grupoRows.slice(TOP_N).reduce(function(s,r){ return s + r.total; }, 0);
+  var restoMes = {};
+  grupoRows.slice(TOP_N).forEach(function(r) {
+    meses.forEach(function(m) { restoMes[m] = (restoMes[m]||0) + (r.data[m]||0); });
+  });
 
-  document.getElementById('flujo-tbody').innerHTML = _flujoFiltered.map(function(r) {
-    var clsColor = CLS_COLORS[r.cls] || 'var(--text2)';
-    return '<tr>'+
-      '<td style="font-family:var(--font-num);font-size:12px">'+r.mes+'</td>'+
-      '<td style="text-align:center"><span class="chip chip-'+r.cls.toLowerCase()+'">'+r.cls+'</span></td>'+
-      '<td style="font-size:11px;color:var(--text2)" title="'+r.almNom+'">'+r.alm+'</td>'+
-      '<td style="font-size:12px;color:var(--text3)">'+r.centro+'</td>'+
-      '<td style="text-align:right;font-weight:500;color:'+clsColor+'">'+fmt(r.valor)+'</td>'+
-      '<td style="text-align:right"><div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;">'+
-        '<div style="width:'+(r.pct*.8).toFixed(0)+'px;height:4px;background:var(--gold);border-radius:2px;opacity:.6;"></div>'+
-        '<span style="font-size:11px;color:var(--text3);min-width:40px;text-align:right">'+r.pct.toFixed(1)+'%</span></div></td>'+
-      '<td style="text-align:right">'+r.piezas.toLocaleString('es-MX')+'</td>'+
-      '<td style="text-align:right;color:var(--text2)">'+r.mats+'</td>'+
-      '<td style="text-align:right;color:var(--text3)">'+r.dias+'</td>'+
+  var thStyle = 'style="background:var(--bg3);text-align:right;padding:7px 10px;font-size:10px;white-space:nowrap;"';
+  var thStyleL = 'style="background:var(--bg3);padding:7px 10px;font-size:10px;"';
+  var hdrTitle = 'style="background:#1a3a5c;color:#7ab8f5;text-align:center;padding:6px;font-size:10px;font-weight:700;letter-spacing:.5px;"';
+
+  // Build header
+  var thead = '<thead><tr>'+
+    '<th '+thStyleL+'>CLASIFICACIÓN</th>'+
+    meses.map(function(m) {
+      var label = m.slice(0,7).split('-').reverse().join('/');  // YYYY-MM → MM/YYYY
+      return '<th '+thStyle+'>'+label+'</th>';
+    }).join('')+
+    '<th '+thStyle+'>TOTAL</th>'+
+    '<th '+thStyle+'>% DEL TOTAL</th>'+
+  '</tr></thead>';
+
+  var cellStyle = function(v, isTotal) {
+    return 'style="text-align:right;padding:6px 10px;font-size:12px;'+(isTotal?'font-weight:700;color:var(--gold);':'color:var(--text2);')+'"';
+  };
+
+  var tbody = '<tbody>';
+  topRows.forEach(function(r) {
+    var pct = grandTotal > 0 ? (r.total/grandTotal*100).toFixed(1) : '0.0';
+    tbody += '<tr>'+
+      '<td style="padding:6px 10px;font-size:12px;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+r.grupo+'">'+r.grupo+'</td>'+
+      meses.map(function(m) {
+        var v = r.data[m] || 0;
+        return '<td '+cellStyle(v,false)+'>'+(v>0?fmt(v):'—')+'</td>';
+      }).join('')+
+      '<td '+cellStyle(r.total,true)+'>'+fmt(r.total)+'</td>'+
+      '<td style="text-align:right;padding:6px 10px;font-size:12px;color:var(--text3);">'+pct+'%</td>'+
     '</tr>';
-  }).join('');
+  });
+  // Resto row
+  if (restoVal > 0) {
+    tbody += '<tr style="color:var(--text3);font-style:italic;">'+
+      '<td style="padding:6px 10px;font-size:12px;">Resto de clasificaciones</td>'+
+      meses.map(function(m){ var v=restoMes[m]||0; return '<td style="text-align:right;padding:6px 10px;font-size:12px;">'+(v>0?fmt(v):'—')+'</td>'; }).join('')+
+      '<td style="text-align:right;padding:6px 10px;font-size:12px;">'+fmt(restoVal)+'</td>'+
+      '<td style="text-align:right;padding:6px 10px;font-size:12px;">'+(grandTotal>0?(restoVal/grandTotal*100).toFixed(1):0)+'%</td>'+
+    '</tr>';
+  }
+  // Total row
+  tbody += '<tr style="font-weight:700;background:rgba(212,168,83,.1);border-top:2px solid var(--gold);">'+
+    '<td style="padding:7px 10px;font-size:13px;color:var(--gold);">TOTAL</td>'+
+    meses.map(function(m){ var v=mesTotal[m]||0; return '<td style="text-align:right;padding:7px 10px;font-size:12px;color:var(--gold);">'+fmt(v)+'</td>'; }).join('')+
+    '<td style="text-align:right;padding:7px 10px;font-size:13px;color:var(--gold);">'+fmt(grandTotal)+'</td>'+
+    '<td style="text-align:right;padding:7px 10px;font-size:12px;color:var(--gold);">100.0%</td>'+
+  '</tr></tbody>';
+
+  document.getElementById('flujo-t1').innerHTML = thead + tbody;
+  document.getElementById('flujo-table-count').textContent = 'Top '+Math.min(TOP_N,grupoRows.length)+' de '+grupoRows.length+' grupos';
+  document.getElementById('flujo-table-panel').style.display = 'block';
+
+  // ── TABLE 2: Inventario histórico vs comprado en rango ─────────
+  flujoRenderTable2(grandTotal);
+}
+
+function flujoRenderTable2(rangoTotal) {
+  var CLASES = ['A','B','C','D','E','N'];
+  var CLS_COLORS = { A:'#d4a853', B:'#58a6ff', C:'#3fb950', D:'#f0883e', E:'#f85149', N:'#8b949e' };
+  var centro = document.getElementById('flujo-centro').value;
+  var almFil  = document.getElementById('flujo-alm').value;
+
+  // ── Inventario total histórico (all dates) ──────────────────────
+  var histMap = {};  // almKey → { ctr, almNom, A:0, B:0, ... total:0 }
+  GD_ROWS.forEach(function(r) {
+    if (centro && r.centro !== centro) return;
+    var cls = r.cls_c || 'N';
+    (r.alms||[]).forEach(function(a) {
+      if (almFil && a.a !== almFil) return;
+      var key = r.centro + '|' + a.a;
+      if (!histMap[key]) histMap[key] = { ctr: r.centro, alm: a.a, nom: a.n||a.a, A:0,B:0,C:0,D:0,E:0,N:0,total:0 };
+      var v = (a.s||0) * (r.costo||0);
+      histMap[key][cls]   += v;
+      histMap[key].total  += v;
+    });
+  });
+
+  // ── Comprado en rango (from _flujoData) ─────────────────────────
+  var rangoMap = {};
+  _flujoData.forEach(function(r) {
+    var key = r.centro + '|' + r.alm;
+    if (!rangoMap[key]) rangoMap[key] = { A:0,B:0,C:0,D:0,E:0,N:0,total:0 };
+    rangoMap[key][r.cls]  += r.valor;
+    rangoMap[key].total   += r.valor;
+  });
+
+  var almKeys = Object.keys(histMap).sort(function(a,b) {
+    return histMap[b].total - histMap[a].total;
+  });
+
+  // Build table
+  var thS = 'style="background:var(--bg3);text-align:right;padding:6px 8px;font-size:10px;white-space:nowrap;"';
+  var thL = 'style="background:var(--bg3);padding:6px 8px;font-size:10px;"';
+
+  var thead = '<thead>'+
+    '<tr>'+
+      '<th '+thL+' rowspan="2">CTR</th>'+
+      '<th '+thL+' rowspan="2">ALMACÉN</th>'+
+      '<th style="background:#1a3a5c;color:#7ab8f5;text-align:center;padding:5px;font-size:10px;font-weight:700;" colspan="7">INVENTARIO TOTAL HISTÓRICO</th>'+
+      '<th style="background:#1a3f2a;color:#3fb950;text-align:center;padding:5px;font-size:10px;font-weight:700;" colspan="7">COMPRADO EN RANGO</th>'+
+      '<th style="background:#3a2010;color:#f0883e;text-align:center;padding:5px;font-size:10px;font-weight:700;" colspan="2">VARIACIÓN</th>'+
+    '</tr>'+
+    '<tr>'+
+      CLASES.map(function(c){ return '<th style="background:#0d2038;color:'+CLS_COLORS[c]+';text-align:right;padding:5px 8px;font-size:10px;">'+c+'</th>'; }).join('')+
+      '<th style="background:#0d2038;text-align:right;padding:5px 8px;font-size:10px;font-weight:700;">TOTAL HIST.</th>'+
+      CLASES.map(function(c){ return '<th style="background:#0d2a18;color:'+CLS_COLORS[c]+';text-align:right;padding:5px 8px;font-size:10px;">'+c+'</th>'; }).join('')+
+      '<th style="background:#0d2a18;text-align:right;padding:5px 8px;font-size:10px;font-weight:700;color:#3fb950;">TOTAL RANGO</th>'+
+      '<th style="background:#2a1a08;text-align:right;padding:5px 8px;font-size:10px;color:#f0883e;">DIFERENCIA</th>'+
+      '<th style="background:#2a1a08;text-align:right;padding:5px 8px;font-size:10px;color:#f0883e;">% RANGO/HIST.</th>'+
+    '</tr>'+
+  '</thead>';
+
+  // Totals for footer
+  var ftHist = { A:0,B:0,C:0,D:0,E:0,N:0,total:0 };
+  var ftRango = { A:0,B:0,C:0,D:0,E:0,N:0,total:0 };
+
+  var tbody = '<tbody>';
+  almKeys.forEach(function(key) {
+    var h = histMap[key];
+    var rg = rangoMap[key] || { A:0,B:0,C:0,D:0,E:0,N:0,total:0 };
+    var diff = rg.total - h.total;
+    var pct  = h.total > 0 ? (rg.total/h.total*100).toFixed(1)+'%' : '—';
+    var diffColor = diff >= 0 ? '#f0883e' : '#3fb950';
+    CLASES.forEach(function(c){ ftHist[c]+=h[c]; ftRango[c]+=rg[c]; });
+    ftHist.total  += h.total;
+    ftRango.total += rg.total;
+
+    tbody += '<tr>'+
+      '<td style="padding:5px 8px;font-size:11px;color:var(--text3);">'+h.ctr+'</td>'+
+      '<td style="padding:5px 8px;font-size:12px;font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+h.nom+'">'+h.nom+'</td>'+
+      CLASES.map(function(c){ return '<td style="text-align:right;padding:5px 8px;font-size:11px;color:var(--text2);">'+(h[c]>0?fmt(h[c]):'')+'</td>'; }).join('')+
+      '<td style="text-align:right;padding:5px 8px;font-size:12px;font-weight:600;color:var(--gold);">'+fmt(h.total)+'</td>'+
+      CLASES.map(function(c){ return '<td style="text-align:right;padding:5px 8px;font-size:11px;color:'+CLS_COLORS[c]+';">'+(rg[c]>0?fmt(rg[c]):'')+'</td>'; }).join('')+
+      '<td style="text-align:right;padding:5px 8px;font-size:12px;font-weight:600;color:#3fb950;">'+(rg.total>0?fmt(rg.total):'—')+'</td>'+
+      '<td style="text-align:right;padding:5px 8px;font-size:12px;color:'+diffColor+';">'+(rg.total>0?fmt(diff):'')+'</td>'+
+      '<td style="text-align:right;padding:5px 8px;font-size:12px;color:'+diffColor+';">'+pct+'</td>'+
+    '</tr>';
+  });
+
+  // Footer totals
+  var ftDiff = ftRango.total - ftHist.total;
+  var ftPct  = ftHist.total > 0 ? (ftRango.total/ftHist.total*100).toFixed(1)+'%' : '—';
+  tbody += '<tr style="font-weight:700;background:rgba(212,168,83,.12);border-top:2px solid var(--gold);">'+
+    '<td style="padding:6px 8px;font-size:12px;color:var(--gold);" colspan="2">TOTAL</td>'+
+    CLASES.map(function(c){ return '<td style="text-align:right;padding:6px 8px;font-size:11px;color:var(--gold);">'+fmt(ftHist[c])+'</td>'; }).join('')+
+    '<td style="text-align:right;padding:6px 8px;font-size:13px;color:var(--gold);">'+fmt(ftHist.total)+'</td>'+
+    CLASES.map(function(c){ return '<td style="text-align:right;padding:6px 8px;font-size:11px;color:#3fb950;">'+fmt(ftRango[c])+'</td>'; }).join('')+
+    '<td style="text-align:right;padding:6px 8px;font-size:13px;color:#3fb950;">'+fmt(ftRango.total)+'</td>'+
+    '<td style="text-align:right;padding:6px 8px;font-size:12px;color:#f0883e;">'+fmt(ftDiff)+'</td>'+
+    '<td style="text-align:right;padding:6px 8px;font-size:12px;color:#f0883e;">'+ftPct+'</td>'+
+  '</tr></tbody>';
+
+  document.getElementById('flujo-t2').innerHTML = thead + tbody;
+  document.getElementById('flujo-table2-panel').style.display = 'block';
 }
 
 function flujoSort(key) {
@@ -3453,15 +3622,25 @@ function flujoSort(key) {
 }
 
 function flujoExport() {
-  if (!_flujoFiltered.length) return;
-  var headers = ['Mes_Recepcion','Clasificacion','Almacen','Nombre_Almacen','Centro','Valor_Inv','Pct_Total','Piezas','Materiales','Dias_Promedio'];
-  var rows = _flujoFiltered.map(function(r) {
-    return [r.mes,r.cls,r.alm,'"'+r.almNom+'"',r.centro,r.valor.toFixed(2),r.pct.toFixed(2),r.piezas,r.mats,r.dias];
+  var agg = window._flujoGrupoMesAgg || {};
+  if (!Object.keys(agg).length) return;
+  var meses = [...new Set(Object.values(agg).map(function(r){ return r.mes; }))].sort();
+  var grupoMes = {};
+  Object.values(agg).forEach(function(g) {
+    if (!grupoMes[g.grupo]) grupoMes[g.grupo] = { total: 0 };
+    grupoMes[g.grupo][g.mes] = (grupoMes[g.grupo][g.mes]||0) + g.valor;
+    grupoMes[g.grupo].total += g.valor;
+  });
+  var grandTotal = Object.values(grupoMes).reduce(function(s,g){ return s+g.total; },0);
+  var headers = ['Grupo'].concat(meses).concat(['Total','Pct_del_Total']);
+  var rows = Object.keys(grupoMes).sort(function(a,b){ return grupoMes[b].total-grupoMes[a].total; }).map(function(g) {
+    var pct = grandTotal>0?(grupoMes[g].total/grandTotal*100).toFixed(1):'0.0';
+    return ['"'+g+'"'].concat(meses.map(function(m){ return (grupoMes[g][m]||0).toFixed(0); })).concat([grupoMes[g].total.toFixed(0),pct+'%']);
   });
   var csv = [headers.join(',')].concat(rows.map(function(r){ return r.join(','); })).join('\n');
   var blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   var url = URL.createObjectURL(blob);
-  var a = document.createElement('a'); a.href=url; a.download='flujo_efectivo.csv'; a.click();
+  var a = document.createElement('a'); a.href=url; a.download='flujo_grupos.csv'; a.click();
   URL.revokeObjectURL(url);
 }
 
