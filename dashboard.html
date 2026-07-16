@@ -1991,16 +1991,16 @@
         <div style="font-size:11px;color:var(--text2);margin-top:4px;" id="met-k-dias-sub">Stock / Consumo diario</div>
       </div>
       <div class="panel" style="padding:14px 16px;">
-        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Fill Rate</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Actividad Promedio</div>
         <div style="font-family:var(--font-num);font-size:26px;font-weight:600;color:#3fb950" id="met-k-fr">—</div>
         <div style="font-size:11px;color:var(--text3);margin-top:3px;">% pedidos surtidos</div>
-        <div style="font-size:11px;color:var(--text2);margin-top:4px;" id="met-k-fr-sub">Ventas / (Ventas + Fallas)</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;" id="met-k-fr-sub">Meses con demanda / 12</div>
       </div>
       <div class="panel" style="padding:14px 16px;">
-        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Stockout Rate</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Materiales Inactivos</div>
         <div style="font-family:var(--font-num);font-size:26px;font-weight:600;color:#f85149" id="met-k-so">—</div>
         <div style="font-size:11px;color:var(--text3);margin-top:3px;">% demanda insatisfecha</div>
-        <div style="font-size:11px;color:var(--text2);margin-top:4px;" id="met-k-so-sub">Fallas / (Ventas + Fallas)</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;" id="met-k-so-sub">6+ meses sin demanda</div>
       </div>
       <div class="panel" style="padding:14px 16px;">
         <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Cobertura Promedio</div>
@@ -2015,7 +2015,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
           <div class="panel-title" style="margin-bottom:2px;">&#8645; Exceso vs Faltante por Grupo</div>
-          <div style="font-size:12px;color:var(--text3);">Sobrestock valorizado (arriba del m&aacute;ximo Min/Max) vs venta perdida estimada (fallas &times; costo) &middot; responde a los filtros de arriba</div>
+          <div style="font-size:12px;color:var(--text3);">Sobrestock valorizado (arriba del m&aacute;x Min/Max) vs faltante valorizado (debajo del m&iacute;n) &middot; mismo modelo de la pesta&ntilde;a Min/Max &middot; responde a los filtros de arriba</div>
         </div>
         <span class="filter-results" id="met-ef-tot"></span>
       </div>
@@ -2028,8 +2028,8 @@
             <th>Grupo</th>
             <th style="text-align:right">Exceso pzs</th>
             <th style="text-align:right">Exceso $</th>
-            <th style="text-align:right">Fallas pzs</th>
-            <th style="text-align:right">Venta perdida $</th>
+            <th style="text-align:right">Faltante pzs</th>
+            <th style="text-align:right">Faltante $</th>
             <th style="text-align:right">Capital neto $</th>
           </tr></thead>
           <tbody id="met-ef-tbody"></tbody>
@@ -2041,8 +2041,8 @@
     <div class="panel" style="margin-bottom:20px;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
-          <div class="panel-title" style="margin-bottom:2px;">&#128293; Mapa de Desabasto &mdash; Grupo &times; Almac&eacute;n</div>
-          <div style="font-size:12px;color:var(--text3);">Stockout rate (fallas / demanda) por celda &middot; m&aacute;s rojo = m&aacute;s venta perdida &middot; responde a los filtros de arriba</div>
+          <div class="panel-title" style="margin-bottom:2px;">&#128176; Mapa de Capital Inactivo &mdash; Grupo &times; Almac&eacute;n</div>
+          <div style="font-size:12px;color:var(--text3);">% del valor de inventario en materiales con 6+ meses sin demanda &middot; m&aacute;s rojo = m&aacute;s capital detenido &middot; responde a los filtros de arriba</div>
         </div>
         <span class="filter-results" id="met-hm-count"></span>
       </div>
@@ -2079,7 +2079,7 @@
               <th style="text-align:right" onclick="metSortCrit('stock')">Stock ↕</th>
               <th style="text-align:right" onclick="metSortCrit('vta')">Ventas ↕</th>
               <th style="text-align:right" onclick="metSortCrit('fal')">Fallas ↕</th>
-              <th style="text-align:right" onclick="metSortCrit('fr')">Fill Rate ↕</th>
+              <th style="text-align:right" onclick="metSortCrit('fr')">Meses c/dem ↕</th>
               <th style="text-align:right" onclick="metSortCrit('p6')">Prom 6M ↕</th>
               <th style="text-align:right" onclick="metSortCrit('costo')">Costo Unit ↕</th>
             </tr>
@@ -3489,9 +3489,15 @@ function metApplyFilters() {
   // Días de inventario = Stock / Consumo diario
   var dias = consumoDiarioTotal > 0 ? (totalStock / consumoDiarioTotal) : 0;
 
-  // Fill Rate
-  var fr = (totalVta + totalFal) > 0 ? (totalVta / (totalVta + totalFal) * 100) : 0;
-  var so = 100 - fr;
+  // Actividad promedio: fal = meses SIN demanda de los últimos 12
+  var sumFal = rows.reduce(function(s,r){ return s + Math.min(12, r.fal || 0); }, 0);
+  var avgFal = rows.length > 0 ? sumFal / rows.length : 0;
+  var actividad = (12 - avgFal) / 12 * 100;
+
+  // Materiales inactivos: 6+ meses sin demanda
+  var inactivos = rows.filter(function(r){ return (r.fal || 0) >= 6; });
+  var pctInact = rows.length > 0 ? (inactivos.length / rows.length * 100) : 0;
+  var valInact = inactivos.reduce(function(s,r){ return s + (r.stock || 0) * (r.costo || 0); }, 0);
 
   // Cobertura promedio (días de stock por material con movimiento)
   var rowsConMov = rows.filter(function(r){ return r.p6 > 0; });
@@ -3513,10 +3519,10 @@ function metApplyFilters() {
   document.getElementById('met-k-dias').textContent = Math.round(dias) + ' d';
   document.getElementById('met-k-dias').style.color = diasColor;
   document.getElementById('met-k-dias-sub').textContent = fmtN(totalStock) + ' uds / ' + consumoDiarioTotal.toFixed(1) + ' diarios';
-  document.getElementById('met-k-fr').textContent   = fr.toFixed(1) + '%';
-  document.getElementById('met-k-fr-sub').textContent = fmtN(totalVta) + ' ventas · ' + fmtN(totalFal) + ' fallas';
-  document.getElementById('met-k-so').textContent   = so.toFixed(1) + '%';
-  document.getElementById('met-k-so-sub').textContent = fmtN(totalFal) + ' / ' + fmtN(totalVta + totalFal) + ' demanda';
+  document.getElementById('met-k-fr').textContent   = actividad.toFixed(1) + '%';
+  document.getElementById('met-k-fr-sub').textContent = (12 - avgFal).toFixed(1) + ' de 12 meses con demanda (prom.)';
+  document.getElementById('met-k-so').textContent   = pctInact.toFixed(1) + '%';
+  document.getElementById('met-k-so-sub').textContent = fmtN(inactivos.length) + ' de ' + fmtN(rows.length) + ' materiales · ' + fmt(valInact) + ' en stock';
   document.getElementById('met-k-cob').textContent  = Math.round(cobProm) + ' d';
   document.getElementById('met-k-cob-sub').textContent = fmtN(rowsConMov.length) + ' materiales con movimiento';
 
@@ -3524,7 +3530,7 @@ function metApplyFilters() {
   _metCritAll = rows.filter(function(r){
     return (r.cls === 'A' || r.cls === 'B') && r.stock === 0;
   }).map(function(r) {
-    var fr = (r.vta + r.fal) > 0 ? (r.vta / (r.vta + r.fal) * 100) : 0;
+    var fr = Math.max(0, 12 - Math.min(12, r.fal || 0)); // meses con demanda
     return Object.assign({}, r, { fr: fr });
   });
 
@@ -3540,34 +3546,38 @@ function metRenderHeatmap(rows) {
   var tbody = document.getElementById('met-hm-tbody');
   if (!thead || !tbody) return;
 
-  /* celda[grupo][alm] = {fal, dem} */
-  var grid = {}, almSet = {}, grpTot = {};
+  var INACTIVO_MESES = 6;
+  /* celda[grupo][alm] = {inact$, total$} — solo filas con stock */
+  var grid = {}, almVal = {}, grpInact = {};
   rows.forEach(function(r) {
-    var dem = (r.vta || 0) + (r.fal || 0);
-    if (dem <= 0) return;
+    var val = (r.stock || 0) * (r.costo || 0);
+    if (val <= 0) return;
     var g = r.grupo || 'Sin grupo';
     var a = r.alm || '\u2014';
+    var inact = (r.fal || 0) >= INACTIVO_MESES ? val : 0;
     if (!grid[g]) grid[g] = {};
-    if (!grid[g][a]) grid[g][a] = { fal: 0, dem: 0 };
-    grid[g][a].fal += r.fal || 0;
-    grid[g][a].dem += dem;
-    almSet[a] = (almSet[a] || 0) + dem;
-    if (!grpTot[g]) grpTot[g] = { fal: 0, dem: 0 };
-    grpTot[g].fal += r.fal || 0;
-    grpTot[g].dem += dem;
+    if (!grid[g][a]) grid[g][a] = { inact: 0, total: 0 };
+    grid[g][a].inact += inact;
+    grid[g][a].total += val;
+    almVal[a] = (almVal[a] || 0) + val;
+    if (!grpInact[g]) grpInact[g] = { inact: 0, total: 0 };
+    grpInact[g].inact += inact;
+    grpInact[g].total += val;
   });
 
-  /* columnas: almacenes con demanda, orden por demanda desc, máx 10 */
-  var alms = Object.keys(almSet).sort(function(a,b){ return almSet[b]-almSet[a]; }).slice(0, 10);
-  /* filas: grupos por fallas desc, máx 15 */
-  var grupos = Object.keys(grpTot).sort(function(a,b){ return grpTot[b].fal-grpTot[a].fal; }).slice(0, 15);
+  /* columnas: almacenes por valor total desc, máx 10; filas: grupos por $ inactivo desc, máx 15 */
+  var alms = Object.keys(almVal).sort(function(a,b){ return almVal[b]-almVal[a]; }).slice(0, 10);
+  var grupos = Object.keys(grpInact).sort(function(a,b){ return grpInact[b].inact-grpInact[a].inact; }).slice(0, 15);
 
+  var totInact = 0, totVal = 0;
+  Object.keys(grpInact).forEach(function(g){ totInact += grpInact[g].inact; totVal += grpInact[g].total; });
   var elCount = document.getElementById('met-hm-count');
-  if (elCount) elCount.textContent = grupos.length + ' grupos \u00d7 ' + alms.length + ' almacenes';
+  if (elCount) elCount.textContent = 'Inactivo ' + fmt(totInact) + ' de ' + fmt(totVal) +
+    (totVal > 0 ? ' (' + (totInact/totVal*100).toFixed(0) + '%)' : '');
 
   if (!grupos.length || !alms.length) {
     thead.innerHTML = '';
-    tbody.innerHTML = '<tr><td style="text-align:center;padding:24px;color:var(--text3)">Sin demanda registrada con los filtros actuales.</td></tr>';
+    tbody.innerHTML = '<tr><td style="text-align:center;padding:24px;color:var(--text3)">Sin inventario valorizado con los filtros actuales.</td></tr>';
     return;
   }
 
@@ -3575,24 +3585,21 @@ function metRenderHeatmap(rows) {
     alms.map(function(a){ return '<th style="text-align:center;font-size:10px;">' + a + '</th>'; }).join('') +
     '<th style="text-align:center;font-size:10px;">TOTAL</th></tr>';
 
-  var cell = function(fal, dem) {
-    if (!dem) return '<td style="text-align:center;color:var(--text3);background:rgba(128,128,128,0.05)">\u2014</td>';
-    var rate = fal / dem;
+  var cell = function(c) {
+    if (!c || c.total <= 0) return '<td style="text-align:center;color:var(--text3);background:rgba(128,128,128,0.05)">\u2014</td>';
+    var rate = c.inact / c.total;
     var alpha = Math.min(0.85, rate * 0.9 + (rate > 0 ? 0.08 : 0));
     var bg = rate === 0 ? 'rgba(63,185,80,0.10)' : 'rgba(248,81,73,' + alpha.toFixed(2) + ')';
     var fg = rate > 0.45 ? '#fff' : 'var(--text,#c9d1d9)';
-    return '<td title="' + fal.toLocaleString('es-MX') + ' fallas / ' + dem.toLocaleString('es-MX') + ' demanda"' +
+    return '<td title="Inactivo ' + fmt(c.inact) + ' de ' + fmt(c.total) + '"' +
       ' style="text-align:center;background:' + bg + ';color:' + fg + ';border-radius:3px;font-size:11px;padding:6px 8px;">' +
       (rate * 100).toFixed(0) + '%</td>';
   };
 
   tbody.innerHTML = grupos.map(function(g) {
     var row = '<td style="position:sticky;left:0;background:var(--bg2,#161b22);z-index:1;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + g + '">' + g + '</td>';
-    alms.forEach(function(a) {
-      var c = (grid[g] && grid[g][a]) || null;
-      row += c ? cell(c.fal, c.dem) : cell(0, 0);
-    });
-    row += cell(grpTot[g].fal, grpTot[g].dem);
+    alms.forEach(function(a) { row += cell((grid[g] && grid[g][a]) || null); });
+    row += cell(grpInact[g]);
     return '<tr>' + row + '</tr>';
   }).join('');
 }
@@ -3608,14 +3615,16 @@ function metRenderExcFal(rows) {
     var cd = p6 / 30;
     var sigmaD = (p6 * p.cv) / Math.sqrt(30);
     var ss = Math.ceil(p.z * sigmaD * Math.sqrt(p.lt));
+    var minimo = Math.ceil(cd * p.lt + ss);
     var maximo = Math.ceil(cd * (p.lt + p.pr) + ss);
     var excPzs = r.stock > maximo ? (r.stock - maximo) : 0;
+    var defPzs = r.stock < minimo ? (minimo - r.stock) : 0;
     var key = r.grupo || 'Sin grupo';
     if (!g[key]) g[key] = { grupo:key, excP:0, excV:0, falP:0, falV:0 };
     g[key].excP += excPzs;
     g[key].excV += excPzs * (r.costo || 0);
-    g[key].falP += r.fal || 0;
-    g[key].falV += (r.fal || 0) * (r.costo || 0);
+    g[key].falP += defPzs;
+    g[key].falV += defPzs * (r.costo || 0);
   });
 
   var arr = Object.keys(g).map(function(k){ return g[k]; })
@@ -3625,7 +3634,7 @@ function metRenderExcFal(rows) {
   var totExc = arr.reduce(function(s,x){ return s + x.excV; }, 0);
   var totFal = arr.reduce(function(s,x){ return s + x.falV; }, 0);
   var elTot = document.getElementById('met-ef-tot');
-  if (elTot) elTot.textContent = 'Exceso ' + fmt(totExc) + ' \u00b7 Perdida ' + fmt(totFal);
+  if (elTot) elTot.textContent = 'Exceso ' + fmt(totExc) + ' \u00b7 Faltante ' + fmt(totFal);
 
   var top = arr.slice(0, 12);
   var old = document.getElementById('chartExcesoFaltante');
@@ -3640,7 +3649,7 @@ function metRenderExcFal(rows) {
         labels: top.map(function(x){ return x.grupo; }),
         datasets: [
           { label: 'Exceso $',        data: top.map(function(x){ return x.excV; }),  backgroundColor: '#58a6ff', borderRadius: 3 },
-          { label: 'Venta perdida $', data: top.map(function(x){ return -x.falV; }), backgroundColor: '#f85149', borderRadius: 3 }
+          { label: 'Faltante vs m\u00ednimo $', data: top.map(function(x){ return -x.falV; }), backgroundColor: '#f85149', borderRadius: 3 }
         ]
       },
       options: {
@@ -3702,7 +3711,8 @@ function metRenderCrit() {
   }
 
   tbody.innerHTML = slice.map(function(r) {
-    var frColor = r.fr < 50 ? '#f85149' : r.fr < 80 ? '#ffa657' : '#3fb950';
+    // más meses con demanda + stock 0 = más urgente
+    var frColor = r.fr >= 9 ? '#f85149' : r.fr >= 5 ? '#ffa657' : '#8b949e';
     return '<tr>' +
       '<td style="font-family:var(--font-num);color:var(--gold);font-size:12px">'+r.mat+'</td>' +
       '<td class="desc-cell" title="'+r.desc+'">'+r.desc+'</td>' +
@@ -3713,7 +3723,7 @@ function metRenderCrit() {
       '<td style="text-align:right;color:#f85149;font-weight:600">'+r.stock.toLocaleString('es-MX')+'</td>' +
       '<td style="text-align:right">'+r.vta.toLocaleString('es-MX')+'</td>' +
       '<td style="text-align:right;color:#f85149">'+r.fal.toLocaleString('es-MX')+'</td>' +
-      '<td style="text-align:right"><span style="color:'+frColor+';font-weight:500">'+r.fr.toFixed(1)+'%</span></td>' +
+      '<td style="text-align:right"><span style="color:'+frColor+';font-weight:500">'+r.fr+' m</span></td>' +
       '<td style="text-align:right;color:var(--text2)">'+r.p6.toFixed(2)+'</td>' +
       '<td style="text-align:right">'+(r.costo>0?'$'+r.costo.toLocaleString('es-MX',{minimumFractionDigits:2}):'—')+'</td>' +
     '</tr>';
