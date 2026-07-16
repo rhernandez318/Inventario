@@ -12,6 +12,249 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ══════════════════════════════════════
+   XF — Cross-filter + Export Excel
+══════════════════════════════════════ */
+(function(){
+  'use strict';
+
+  /* ---- estilos ---- */
+  var css = document.createElement('style');
+  css.textContent =
+    '.xf-hide{display:none !important}' +
+    '.xf-chip{display:inline-flex;align-items:center;gap:8px;background:#d4a85322;border:1px solid #d4a853;color:#d4a853;' +
+      'padding:5px 12px;border-radius:16px;font-size:12px;font-weight:600;margin:0 0 12px 0;cursor:pointer;user-select:none}' +
+    '.xf-chip:hover{background:#d4a85338}' +
+    '.xf-chip .xf-x{font-weight:700;font-size:13px}' +
+    '.xf-xlsx-bar{text-align:right;margin:4px 0}' +
+    '.xf-xlsx-btn{background:transparent;border:1px solid #3fb950;color:#3fb950;padding:3px 10px;border-radius:6px;' +
+      'font-size:11px;cursor:pointer;font-weight:600}' +
+    '.xf-xlsx-btn:hover{background:#3fb95022}';
+  document.head.appendChild(css);
+
+  var XF = window.XF = { state: {}, _applying: false };
+
+  /* ---- util color ---- */
+  XF.fade = function(c){
+    if (typeof c !== 'string') return 'rgba(128,128,128,0.15)';
+    var m = c.match(/^#([0-9a-f]{6})$/i);
+    if (m) {
+      var n = parseInt(m[1],16);
+      return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+',0.12)';
+    }
+    m = c.match(/^rgba?\(([^)]+)\)$/i);
+    if (m) {
+      var p = m[1].split(',').slice(0,3).map(function(x){return x.trim();});
+      return 'rgba('+p.join(',')+',0.12)';
+    }
+    return 'rgba(128,128,128,0.15)';
+  };
+
+  var lblStr = function(l){ return Array.isArray(l) ? l.join(' ') : String(l); };
+
+  /* ---- filtrado de tablas (solo clase CSS, nunca inline styles) ---- */
+  XF.applyTables = function(page, label){
+    var tables = page.querySelectorAll('table');
+    for (var t=0;t<tables.length;t++){
+      var tb = tables[t].tBodies[0];
+      if (!tb) continue;
+      var rows = tb.rows, matches = [];
+      for (var i=0;i<rows.length;i++){
+        var hit = false, cells = rows[i].cells;
+        for (var j=0;j<cells.length;j++){
+          var txt = (cells[j].textContent||'').trim();
+          if (txt === label || (label.length>=3 && txt.toUpperCase().indexOf(label.toUpperCase())!==-1)){ hit=true; break; }
+        }
+        matches.push(hit);
+      }
+      var any = matches.indexOf(true)!==-1;
+      for (var k=0;k<rows.length;k++){
+        // si ninguna fila coincide, no tocamos la tabla (evita vaciarla)
+        rows[k].classList.toggle('xf-hide', any && !matches[k]);
+      }
+    }
+  };
+  XF.clearTables = function(page){
+    var hid = page.querySelectorAll('tr.xf-hide');
+    for (var i=0;i<hid.length;i++) hid[i].classList.remove('xf-hide');
+  };
+
+  /* ---- atenuar / restaurar gráficos ---- */
+  XF.chartsIn = function(page){
+    var out = [], inst = Chart.instances || {};
+    Object.keys(inst).forEach(function(k){
+      var ch = inst[k];
+      if (ch && ch.canvas && page.contains(ch.canvas)) out.push(ch);
+    });
+    return out;
+  };
+  XF.dimCharts = function(page, label){
+    XF.chartsIn(page).forEach(function(ch){
+      var labels = (ch.data && ch.data.labels) || [];
+      var idx = -1;
+      for (var i=0;i<labels.length;i++){ if (lblStr(labels[i])===label){ idx=i; break; } }
+      if (idx<0) return;
+      ch.data.datasets.forEach(function(ds){
+        if (ds.$xfOrig === undefined) ds.$xfOrig = ds.backgroundColor;
+        var base = ds.$xfOrig, n = labels.length, cols = [];
+        for (var i=0;i<n;i++){
+          var c = Array.isArray(base) ? base[i % base.length] : base;
+          cols.push(i===idx ? c : XF.fade(c));
+        }
+        ds.backgroundColor = cols;
+      });
+      ch.update('none');
+    });
+  };
+  XF.restoreCharts = function(page){
+    XF.chartsIn(page).forEach(function(ch){
+      var dirty = false;
+      ch.data.datasets.forEach(function(ds){
+        if (ds.$xfOrig !== undefined){ ds.backgroundColor = ds.$xfOrig; delete ds.$xfOrig; dirty=true; }
+      });
+      if (dirty) ch.update('none');
+    });
+  };
+
+  /* ---- chip ---- */
+  XF.renderChip = function(page){
+    var chip = page.querySelector(':scope > .xf-chip, .xf-chip');
+    var label = XF.state[page.id];
+    if (!label){ if (chip) chip.remove(); return; }
+    if (!chip){
+      chip = document.createElement('div');
+      chip.className = 'xf-chip';
+      chip.onclick = function(){ XF.clear(page); };
+      page.insertBefore(chip, page.firstChild);
+    }
+    chip.innerHTML = 'Filtro: <b>' + label + '</b> <span class="xf-x">✕</span>';
+  };
+
+  /* ---- toggle principal ---- */
+  XF.set = function(page, label){
+    XF._applying = true;
+    XF.state[page.id] = label;
+    XF.applyTables(page, label);
+    XF.restoreCharts(page);
+    XF.dimCharts(page, label);
+    XF.renderChip(page);
+    setTimeout(function(){ XF._applying=false; }, 50);
+  };
+  XF.clear = function(page){
+    XF._applying = true;
+    delete XF.state[page.id];
+    XF.clearTables(page);
+    XF.restoreCharts(page);
+    XF.renderChip(page);
+    setTimeout(function(){ XF._applying=false; }, 50);
+  };
+
+  XF.handleChartClick = function(evt, els, chart){
+    if (!els || !els.length || !chart || !chart.data) return;
+    var labels = chart.data.labels || [];
+    var raw = labels[els[0].index];
+    if (raw === undefined || raw === null) return;
+    var label = lblStr(raw).trim();
+    if (!label) return;
+    var page = chart.canvas && chart.canvas.closest('[id^="page-"]');
+    if (!page) return;
+    if (XF.state[page.id] === label) XF.clear(page); else XF.set(page, label);
+  };
+
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape') return;
+    Object.keys(XF.state).forEach(function(pid){
+      var page = document.getElementById(pid);
+      if (page && page.offsetParent !== null) XF.clear(page);
+    });
+  });
+
+  /* ---- parche del constructor Chart: inyecta onClick global sin pisar los existentes ---- */
+  var OrigChart = window.Chart;
+  if (OrigChart){
+    var PatchedChart = function(ctx, config){
+      config = config || {};
+      config.options = config.options || {};
+      var userClick = config.options.onClick;
+      // Si el gráfico ya trae su propio onClick (drill-down nativo con re-agregación),
+      // se respeta y NO se encadena el cross-filter genérico para evitar doble efecto.
+      config.options.onClick = userClick || function(e2, els, ch){
+        XF.handleChartClick(e2, els, ch || this);
+      };
+      return new OrigChart(ctx, config);
+    };
+    PatchedChart.prototype = OrigChart.prototype;
+    Object.setPrototypeOf(PatchedChart, OrigChart);
+    window.Chart = PatchedChart;
+  }
+
+  /* ---- Export Excel ---- */
+  XF.exportTable = function(tbl){
+    if (!window.XLSX){ alert('Librería XLSX no disponible (sin conexión)'); return; }
+    var clone = tbl.cloneNode(true);
+    var hid = clone.querySelectorAll('tr.xf-hide');
+    for (var i=0;i<hid.length;i++) hid[i].parentNode.removeChild(hid[i]);
+    var wb = XLSX.utils.table_to_book(clone, {raw:false});
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    // convertir texto numérico ($1,234.56 / 12.5%) a números reales
+    Object.keys(ws).forEach(function(addr){
+      if (addr[0]==='!') return;
+      var cell = ws[addr];
+      if (cell.t!=='s' || typeof cell.v!=='string') return;
+      var v = cell.v.trim();
+      var m = v.match(/^\$?\s*(-?[\d,]+(?:\.\d+)?)\s*(%?)$/);
+      if (!m) return;
+      var num = parseFloat(m[1].replace(/,/g,''));
+      if (isNaN(num)) return;
+      if (m[2]==='%'){ cell.v = num/100; cell.t='n'; cell.z='0.00%'; }
+      else { cell.v = num; cell.t='n'; if (v.indexOf('$')!==-1) cell.z='$#,##0.00'; }
+    });
+    var page = tbl.closest('[id^="page-"]');
+    var name = (tbl.id || (page ? page.id.replace('page-','') : 'tabla'));
+    XLSX.writeFile(wb, 'inventario_' + name + '.xlsx');
+  };
+
+  XF.injectButtons = function(root){
+    var tables = root.querySelectorAll('table');
+    for (var i=0;i<tables.length;i++){
+      var tbl = tables[i];
+      if (tbl.dataset.xfBtn) continue;
+      if (!tbl.tHead || !tbl.tBodies.length) continue;
+      tbl.dataset.xfBtn = '1';
+      var bar = document.createElement('div');
+      bar.className = 'xf-xlsx-bar';
+      var btn = document.createElement('button');
+      btn.className = 'xf-xlsx-btn';
+      btn.textContent = '\u2B07 Excel';
+      btn.onclick = (function(t){ return function(){ XF.exportTable(t); }; })(tbl);
+      bar.appendChild(btn);
+      tbl.parentNode.insertBefore(bar, tbl);
+    }
+  };
+
+  /* ---- observadores por página: re-render => re-aplicar filtro + botones ---- */
+  document.addEventListener('DOMContentLoaded', function(){
+    var pages = document.querySelectorAll('[id^="page-"]');
+    pages.forEach(function(page){
+      if (page.id === 'page-title') return;
+      XF.injectButtons(page);
+      var timer = null;
+      new MutationObserver(function(){
+        if (XF._applying) return;
+        clearTimeout(timer);
+        timer = setTimeout(function(){
+          XF._applying = true;
+          XF.injectButtons(page);
+          if (XF.state[page.id]) XF.applyTables(page, XF.state[page.id]);
+          setTimeout(function(){ XF._applying=false; }, 50);
+        }, 250);
+      }).observe(page, {childList:true, subtree:true});
+    });
+  });
+})();
+</script>
 <style>
 
   :root {
