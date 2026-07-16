@@ -2010,6 +2010,50 @@
       </div>
     </div>
 
+    <!-- Exceso vs Faltante por Grupo -->
+    <div class="panel" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div class="panel-title" style="margin-bottom:2px;">&#8645; Exceso vs Faltante por Grupo</div>
+          <div style="font-size:12px;color:var(--text3);">Sobrestock valorizado (arriba del m&aacute;ximo Min/Max) vs venta perdida estimada (fallas &times; costo) &middot; responde a los filtros de arriba</div>
+        </div>
+        <span class="filter-results" id="met-ef-tot"></span>
+      </div>
+      <div style="position:relative;height:400px;margin-top:12px;">
+        <canvas id="chartExcesoFaltante"></canvas>
+      </div>
+      <div style="overflow-x:auto;margin-top:14px;">
+        <table class="mat-table" id="met-ef-table">
+          <thead><tr>
+            <th>Grupo</th>
+            <th style="text-align:right">Exceso pzs</th>
+            <th style="text-align:right">Exceso $</th>
+            <th style="text-align:right">Fallas pzs</th>
+            <th style="text-align:right">Venta perdida $</th>
+            <th style="text-align:right">Capital neto $</th>
+          </tr></thead>
+          <tbody id="met-ef-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Heatmap Grupo x Almacen: stockout -->
+    <div class="panel" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div class="panel-title" style="margin-bottom:2px;">&#128293; Mapa de Desabasto &mdash; Grupo &times; Almac&eacute;n</div>
+          <div style="font-size:12px;color:var(--text3);">Stockout rate (fallas / demanda) por celda &middot; m&aacute;s rojo = m&aacute;s venta perdida &middot; responde a los filtros de arriba</div>
+        </div>
+        <span class="filter-results" id="met-hm-count"></span>
+      </div>
+      <div style="overflow-x:auto;margin-top:12px;">
+        <table class="mat-table" id="met-hm-table" style="border-collapse:separate;border-spacing:2px;">
+          <thead id="met-hm-thead"></thead>
+          <tbody id="met-hm-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Materiales Críticos A/B sin stock -->
     <div class="panel">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
@@ -3486,6 +3530,152 @@ function metApplyFilters() {
 
   _metCritPage = 1;
   metRenderCrit();
+
+  metRenderExcFal(rows);
+  metRenderHeatmap(rows);
+}
+
+function metRenderHeatmap(rows) {
+  var thead = document.getElementById('met-hm-thead');
+  var tbody = document.getElementById('met-hm-tbody');
+  if (!thead || !tbody) return;
+
+  /* celda[grupo][alm] = {fal, dem} */
+  var grid = {}, almSet = {}, grpTot = {};
+  rows.forEach(function(r) {
+    var dem = (r.vta || 0) + (r.fal || 0);
+    if (dem <= 0) return;
+    var g = r.grupo || 'Sin grupo';
+    var a = r.alm || '\u2014';
+    if (!grid[g]) grid[g] = {};
+    if (!grid[g][a]) grid[g][a] = { fal: 0, dem: 0 };
+    grid[g][a].fal += r.fal || 0;
+    grid[g][a].dem += dem;
+    almSet[a] = (almSet[a] || 0) + dem;
+    if (!grpTot[g]) grpTot[g] = { fal: 0, dem: 0 };
+    grpTot[g].fal += r.fal || 0;
+    grpTot[g].dem += dem;
+  });
+
+  /* columnas: almacenes con demanda, orden por demanda desc, máx 10 */
+  var alms = Object.keys(almSet).sort(function(a,b){ return almSet[b]-almSet[a]; }).slice(0, 10);
+  /* filas: grupos por fallas desc, máx 15 */
+  var grupos = Object.keys(grpTot).sort(function(a,b){ return grpTot[b].fal-grpTot[a].fal; }).slice(0, 15);
+
+  var elCount = document.getElementById('met-hm-count');
+  if (elCount) elCount.textContent = grupos.length + ' grupos \u00d7 ' + alms.length + ' almacenes';
+
+  if (!grupos.length || !alms.length) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '<tr><td style="text-align:center;padding:24px;color:var(--text3)">Sin demanda registrada con los filtros actuales.</td></tr>';
+    return;
+  }
+
+  thead.innerHTML = '<tr><th style="position:sticky;left:0;background:var(--bg2,#161b22);z-index:1;">Grupo</th>' +
+    alms.map(function(a){ return '<th style="text-align:center;font-size:10px;">' + a + '</th>'; }).join('') +
+    '<th style="text-align:center;font-size:10px;">TOTAL</th></tr>';
+
+  var cell = function(fal, dem) {
+    if (!dem) return '<td style="text-align:center;color:var(--text3);background:rgba(128,128,128,0.05)">\u2014</td>';
+    var rate = fal / dem;
+    var alpha = Math.min(0.85, rate * 0.9 + (rate > 0 ? 0.08 : 0));
+    var bg = rate === 0 ? 'rgba(63,185,80,0.10)' : 'rgba(248,81,73,' + alpha.toFixed(2) + ')';
+    var fg = rate > 0.45 ? '#fff' : 'var(--text,#c9d1d9)';
+    return '<td title="' + fal.toLocaleString('es-MX') + ' fallas / ' + dem.toLocaleString('es-MX') + ' demanda"' +
+      ' style="text-align:center;background:' + bg + ';color:' + fg + ';border-radius:3px;font-size:11px;padding:6px 8px;">' +
+      (rate * 100).toFixed(0) + '%</td>';
+  };
+
+  tbody.innerHTML = grupos.map(function(g) {
+    var row = '<td style="position:sticky;left:0;background:var(--bg2,#161b22);z-index:1;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + g + '">' + g + '</td>';
+    alms.forEach(function(a) {
+      var c = (grid[g] && grid[g][a]) || null;
+      row += c ? cell(c.fal, c.dem) : cell(0, 0);
+    });
+    row += cell(grpTot[g].fal, grpTot[g].dem);
+    return '<tr>' + row + '</tr>';
+  }).join('');
+}
+
+var _metEFChart = null;
+function metRenderExcFal(rows) {
+  var FALLBACK = { lt:15, z:1.65, cv:0.5, pr:15 };
+  var g = {};
+  rows.forEach(function(r) {
+    var cls = r.cls || 'N';
+    var p = (typeof mmParams !== 'undefined' && (mmParams[cls] || mmParams['N'])) || FALLBACK;
+    var p6 = (r.p6 && r.p6 > 0) ? r.p6 : ((r.p12 && r.p12 > 0) ? r.p12 : 0);
+    var cd = p6 / 30;
+    var sigmaD = (p6 * p.cv) / Math.sqrt(30);
+    var ss = Math.ceil(p.z * sigmaD * Math.sqrt(p.lt));
+    var maximo = Math.ceil(cd * (p.lt + p.pr) + ss);
+    var excPzs = r.stock > maximo ? (r.stock - maximo) : 0;
+    var key = r.grupo || 'Sin grupo';
+    if (!g[key]) g[key] = { grupo:key, excP:0, excV:0, falP:0, falV:0 };
+    g[key].excP += excPzs;
+    g[key].excV += excPzs * (r.costo || 0);
+    g[key].falP += r.fal || 0;
+    g[key].falV += (r.fal || 0) * (r.costo || 0);
+  });
+
+  var arr = Object.keys(g).map(function(k){ return g[k]; })
+    .filter(function(x){ return x.excV > 0 || x.falV > 0; })
+    .sort(function(a,b){ return (b.excV + b.falV) - (a.excV + a.falV); });
+
+  var totExc = arr.reduce(function(s,x){ return s + x.excV; }, 0);
+  var totFal = arr.reduce(function(s,x){ return s + x.falV; }, 0);
+  var elTot = document.getElementById('met-ef-tot');
+  if (elTot) elTot.textContent = 'Exceso ' + fmt(totExc) + ' \u00b7 Perdida ' + fmt(totFal);
+
+  var top = arr.slice(0, 12);
+  var old = document.getElementById('chartExcesoFaltante');
+  if (old) {
+    var canvas = document.createElement('canvas');
+    canvas.id = 'chartExcesoFaltante';
+    old.parentNode.replaceChild(canvas, old);
+    if (_metEFChart) { try { _metEFChart.destroy(); } catch(e){} }
+    _metEFChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: top.map(function(x){ return x.grupo; }),
+        datasets: [
+          { label: 'Exceso $',        data: top.map(function(x){ return x.excV; }),  backgroundColor: '#58a6ff', borderRadius: 3 },
+          { label: 'Venta perdida $', data: top.map(function(x){ return -x.falV; }), backgroundColor: '#f85149', borderRadius: 3 }
+        ]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, grid: { color: '#21262d' },
+               ticks: { color: '#8b949e', callback: function(v){ return fmt(Math.abs(v)); } } },
+          y: { stacked: true, grid: { display: false },
+               ticks: { color: '#8b949e', font: { size: 11 } } }
+        },
+        plugins: {
+          legend: { labels: { color: '#8b949e', boxWidth: 14 } },
+          tooltip: { callbacks: { label: function(c){ return ' ' + c.dataset.label + ': ' + fmt(Math.abs(c.raw)); } } }
+        }
+      }
+    });
+  }
+
+  var tbody = document.getElementById('met-ef-tbody');
+  if (!tbody) return;
+  if (!arr.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Sin excesos ni faltantes con los filtros actuales.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = arr.map(function(x) {
+    var neto = x.excV - x.falV;
+    return '<tr>' +
+      '<td>' + x.grupo + '</td>' +
+      '<td style="text-align:right">' + fmtN(x.excP) + '</td>' +
+      '<td style="text-align:right;color:#58a6ff">' + fmt(x.excV) + '</td>' +
+      '<td style="text-align:right">' + fmtN(x.falP) + '</td>' +
+      '<td style="text-align:right;color:#f85149">' + fmt(x.falV) + '</td>' +
+      '<td style="text-align:right;color:' + (neto >= 0 ? '#58a6ff' : '#f85149') + '">' + fmt(neto) + '</td>' +
+    '</tr>';
+  }).join('');
 }
 
 function metRenderCrit() {

@@ -1,5 +1,5 @@
 // Service Worker — Inventario ABC
-const CACHE_NAME = 'inventario-v3';
+const CACHE_NAME = 'inventario-v5';
 const STATIC_ASSETS = [
   './login.html',
   './dashboard.html',
