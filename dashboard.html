@@ -2014,8 +2014,20 @@
     <div class="panel" style="margin-bottom:20px;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div>
-          <div class="panel-title" style="margin-bottom:2px;">&#8645; Exceso vs Faltante por Grupo</div>
+          <div class="panel-title" style="margin-bottom:2px;">&#8645; Exceso vs Faltante por Grupo
+            <span onclick="var d=document.getElementById('met-ef-info');d.style.display=d.style.display==='none'?'block':'none';"
+                  style="cursor:pointer;color:#58a6ff;font-size:13px;margin-left:6px;user-select:none;" title="Ver c&oacute;mo se calcula">&#9432;</span>
+          </div>
           <div style="font-size:12px;color:var(--text3);">Sobrestock valorizado (arriba del m&aacute;x Min/Max) vs faltante valorizado (debajo del m&iacute;n) &middot; mismo modelo de la pesta&ntilde;a Min/Max &middot; responde a los filtros de arriba</div>
+          <div id="met-ef-info" style="display:none;margin-top:10px;padding:12px 14px;background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.25);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.65;max-width:720px;">
+            <b style="color:var(--text);">&iquest;C&oacute;mo se calcula?</b> Para cada material, en cada almac&eacute;n, se aplica el modelo Min/Max de la pesta&ntilde;a hom&oacute;nima:<br>
+            <b>1.</b> Consumo diario = promedio mensual de venta (p6, o p12 si no hay) &divide; 30.<br>
+            <b>2.</b> Stock de seguridad = z &times; desviaci&oacute;n diaria &times; &radic;lead time (z, CV y lead time seg&uacute;n la clase A&ndash;E; editables en Min/Max).<br>
+            <b>3.</b> M&iacute;nimo = consumo diario &times; lead time + seguridad. M&aacute;ximo = igual, cubriendo tambi&eacute;n el per&iacute;odo de revisi&oacute;n.<br>
+            <b>4.</b> Si el stock supera el m&aacute;ximo &rarr; <span style="color:#58a6ff;">exceso</span> = piezas sobrantes &times; costo. Si est&aacute; debajo del m&iacute;nimo &rarr; <span style="color:#f85149;">faltante</span> = piezas faltantes &times; costo.<br>
+            <b>5.</b> Se suma por grupo. <b>Capital neto</b> = exceso &minus; faltante.<br>
+            <span style="color:var(--text3);">Nota: materiales sin demanda (p6 = 0) tienen m&iacute;n/m&aacute;x de 0, por lo que todo su stock cuenta como exceso &mdash; ah&iacute; aparece el inventario muerto. Si ajustas par&aacute;metros en Min/Max, este an&aacute;lisis los hereda al recargar.</span>
+          </div>
         </div>
         <span class="filter-results" id="met-ef-tot"></span>
       </div>
