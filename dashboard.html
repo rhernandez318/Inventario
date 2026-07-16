@@ -812,9 +812,9 @@
         <div class="kpi-sub" id="kpi-ventas-sub">Unidades · 12 meses</div>
       </div>
       <div class="kpi-card orange">
-        <div class="kpi-label">Fallas Totales</div>
-        <div class="kpi-value" id="kpi-fallas">320,301</div>
-        <div class="kpi-sub" id="kpi-fallas-sub">Faltantes acumulados</div>
+        <div class="kpi-label">Materiales Inactivos</div>
+        <div class="kpi-value" id="kpi-fallas">—</div>
+        <div class="kpi-sub" id="kpi-fallas-sub">6+ meses sin demanda</div>
       </div>
     </div>
 
@@ -861,7 +861,7 @@
             <th>Valor Inventario</th>
             <th>% Valor</th>
             <th>Ventas (ud)</th>
-            <th>Fallas</th>
+            <th>Meses s/dem</th>
             <th>Prom 6M</th>
           </tr>
         </thead>
@@ -903,7 +903,7 @@
         <!-- Fallas vs Ventas -->
     <div class="grid-2">
       <div class="panel">
-        <div class="panel-title">Fallas vs Ventas por Clase</div>
+        <div class="panel-title">Actividad por Clase &mdash; Ventas vs Meses sin Demanda</div>
         <div class="chart-wrap">
           <canvas id="chartFallasVentas"></canvas>
         </div>
@@ -4520,6 +4520,17 @@ function getFilteredData(centro, alm) {
     agg[c].p12 += r.p12;
   });
 
+  // materiales inactivos (6+ meses sin demanda) sobre materiales únicos
+  var inactSet = new Set(), allSet = new Set();
+  var inactVal = 0;
+  rows.forEach(function(r){
+    allSet.add(r.mat);
+    if ((r.fal || 0) >= 6) {
+      if (!inactSet.has(r.mat)) inactVal += (r.stk_c || 0) * (r.costo || 0);
+      inactSet.add(r.mat);
+    }
+  });
+
   // count unique mats per class
   var matByCls = {};
   cls.forEach(function(c){ matByCls[c] = new Set(); });
@@ -4554,7 +4565,8 @@ function getFilteredData(centro, alm) {
     });
   }
 
-  return { cls: cls.map(function(c){ return agg[c]; }), monthly: monthly };
+  return { cls: cls.map(function(c){ return agg[c]; }), monthly: monthly,
+           inact: { count: inactSet.size, total: allSet.size, valor: inactVal } };
 }
 
 function onMainFilterChange() {
@@ -4625,7 +4637,9 @@ function applyMainFilters() {
     document.getElementById('kpi-mats').textContent = fmtN(totalMats);
     document.getElementById('kpi-mats-sub').textContent = (_mfCentro ? 'Centro ' + _mfCentro : 'Ambos centros') + (_mfAlm ? ' · Alm ' + _mfAlm : '');
     document.getElementById('kpi-ventas').textContent = totalVtas >= 1e6 ? (totalVtas/1e6).toFixed(2)+'M' : fmtN(totalVtas);
-    document.getElementById('kpi-fallas').textContent = fmtN(totalFal);
+    var pctIn = fd.inact.total > 0 ? (fd.inact.count / fd.inact.total * 100).toFixed(0) : 0;
+    document.getElementById('kpi-fallas').textContent = fmtN(fd.inact.count) + ' (' + pctIn + '%)';
+    document.getElementById('kpi-fallas-sub').textContent = fmt(fd.inact.valor) + ' en stock \u00b7 6+ meses sin demanda';
   }
 
   // ── Resumen charts ──
@@ -4804,7 +4818,7 @@ function initCharts() {
       labels: CLASSES,
       datasets: [
         { label: 'Ventas', data: DATA.cls.map(d=>d.ventas), backgroundColor: CLASSES.map(c=>COLORS[c]+'99'), borderColor: CLASSES.map(c=>COLORS[c]), borderWidth: 1 },
-        { label: 'Fallas', data: DATA.cls.map(d=>d.fallas), backgroundColor: 'rgba(248,81,73,0.2)', borderColor: '#f85149', borderWidth: 1 }
+        { label: 'Meses sin demanda (acum.)', data: DATA.cls.map(d=>d.fallas), backgroundColor: 'rgba(248,81,73,0.2)', borderColor: '#f85149', borderWidth: 1 }
       ]
     },
     options: { ...chartOpts, scales: {
