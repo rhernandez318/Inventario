@@ -2,7 +2,7 @@
   "name": "Inventario ABC — Distribuidoras Zapata",
   "short_name": "Inventario",
   "description": "Sistema de control de inventario ABC para Distribuidoras Zapata",
-  "start_url": "/login.html",
+  "start_url": "./login.html",
   "display": "standalone",
   "background_color": "#0d1117",
   "theme_color": "#d4a853",

@@ -1,12 +1,12 @@
 // Service Worker — Inventario ABC
 const CACHE_NAME = 'inventario-v1';
 const STATIC_ASSETS = [
-  '/login.html',
-  '/dashboard.html',
-  '/upload.html',
-  '/reset.html',
-  '/index.html',
-  '/manifest.json',
+  './login.html',
+  './dashboard.html',
+  './upload.html',
+  './reset.html',
+  './index.html',
+  './manifest.json',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
 ];

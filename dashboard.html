@@ -3100,7 +3100,8 @@ function spImprimirPDF(pedidoId) {
     '<div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center">'+
     '<button onclick="window.print()" style="padding:8px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Imprimir / Guardar PDF</button>'+
     '<div style="font-size:11px;color:#999">Generado: '+new Date().toLocaleString('es-MX')+'</div>'+
-    '</div>
+    '</div>'+
+    '</body></html>');
   win.document.close();
 }
 
@@ -5356,7 +5357,7 @@ window.addEventListener('load', () => { /* handled by bootstrap */ });
 
 </script>
 
-
+<script>
 /* ══════════════════════════════════════
    MOBILE + PWA
 ══════════════════════════════════════ */
@@ -5430,7 +5431,7 @@ if (window.matchMedia('(display-mode: standalone)').matches) {
 // ── Service Worker registration ──────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register('./sw.js')
       .then(function(reg) { console.log('SW registered:', reg.scope); })
       .catch(function(err) { console.warn('SW registration failed:', err); });
   });
@@ -5446,6 +5447,7 @@ if ('serviceWorker' in navigator) {
     };
   }
 })();
+</script>
 
 </body>
 </html>
