@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="23" fill="#161b22"/>
+  <rect x="10" y="10" width="108" height="108" rx="15" fill="#0d1117" stroke="#d4a853" stroke-width="3"/>
+  <text x="50%" y="54%" font-size="61" text-anchor="middle" dominant-baseline="middle" fill="#d4a853" font-family="serif">📦</text>
+</svg>
