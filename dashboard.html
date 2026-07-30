@@ -1222,18 +1222,18 @@
     <div class="cruce-kpi-grid">
       <div class="cruce-kpi">
         <div class="ck-label">Total Cruces</div>
-        <div class="ck-value" style="color:var(--gold)" id="ck-total">865</div>
+        <div class="ck-value" style="color:var(--gold)" id="ck-total">—</div>
         <div class="ck-sub" id="ck-total-val">—</div>
       </div>
       <div class="cruce-kpi">
-        <div class="ck-label">D/E en 4105 → A/B en 4106</div>
-        <div class="ck-value" style="color:var(--a)" id="ck-5low">354</div>
-        <div class="ck-sub" id="ck-5low-val">—</div>
+        <div class="ck-label">Centro con mayor exceso</div>
+        <div class="ck-value" style="color:var(--b)" id="ck-top-low">—</div>
+        <div class="ck-sub" id="ck-top-low-val">—</div>
       </div>
       <div class="cruce-kpi">
-        <div class="ck-label">D/E en 4106 → A/B en 4105</div>
-        <div class="ck-value" style="color:var(--b)" id="ck-6low">511</div>
-        <div class="ck-sub" id="ck-6low-val">—</div>
+        <div class="ck-label">Cruces severos (E → A)</div>
+        <div class="ck-value" style="color:var(--a)" id="ck-sev">—</div>
+        <div class="ck-sub" id="ck-sev-val">—</div>
       </div>
       <div class="cruce-kpi">
         <div class="ck-label">Con stock ≥ 1 en centro bajo</div>
@@ -1242,29 +1242,62 @@
       </div>
     </div>
     <div class="info-row">
-      Materiales con clasificación D o E en un centro y A o B en el otro — indica desequilibrio de distribución o diferencia de demanda entre ubicaciones.
+      Materiales con clasificación D o E en un centro y A o B en <strong>cualquier otro centro</strong> — indica desequilibrio de distribución o diferencia de demanda entre ubicaciones. El cruce se evalúa entre todos los centros incluidos en la carga (<span id="cruce-centros-lbl">—</span>).
     </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="panel-title" style="margin:0">Matriz de cruces — exceso (D/E) ↔ demanda (A/B)</div>
+        <button class="btn-export btn-sm" id="cruce-mtx-clear" onclick="cruceClearPair()" style="display:none;font-size:11px;">✕ Quitar filtro de par</button>
+      </div>
+      <div class="mat-table-wrap">
+        <table class="mat-table" id="cruce-matrix">
+          <thead id="cruce-matrix-head"></thead>
+          <tbody id="cruce-matrix-body"></tbody>
+        </table>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;">
+        Cada celda cuenta los materiales con clase D/E en el centro de la fila y A/B en el centro de la columna; el importe es el valor inmovilizado en el centro de la fila. Haz clic en una celda para filtrar el detalle. Un material puede aparecer en varias celdas si cruza contra más de un centro.
+      </div>
+    </div>
+
     <div class="panel">
       <div class="filter-bar">
         <div class="filter-group">
           <label>Grupo de artículo</label>
-          <select id="cruce-grupo" onchange="renderCruce()">
+          <select id="cruce-grupo" onchange="cruceOnFilter()">
             <option value="">Todos los grupos</option>
           </select>
         </div>
         <div class="filter-group">
-          <label>Dirección del cruce</label>
-          <select id="cruce-dir" onchange="renderCruce()">
+          <label>Centro con exceso (D/E)</label>
+          <select id="cruce-low" onchange="cruceOnFilter()"><option value="">Todos</option></select>
+        </div>
+        <div class="filter-group">
+          <label>Centro con demanda (A/B)</label>
+          <select id="cruce-high" onchange="cruceOnFilter()"><option value="">Todos</option></select>
+        </div>
+        <div class="filter-group">
+          <label>Severidad del cruce</label>
+          <select id="cruce-sev" onchange="cruceOnFilter()">
             <option value="">Todas</option>
-            <option value="5low">D/E en 4105 → A/B en 4106</option>
-            <option value="6low">D/E en 4106 → A/B en 4105</option>
-            <option value="DE_A">Clase E → Clase A (máx. diferencia)</option>
-            <option value="DE_B">Clase E → Clase B</option>
+            <option value="E_A">E → A (máx. diferencia)</option>
+            <option value="E_B">E → B</option>
+            <option value="D_A">D → A</option>
+            <option value="D_B">D → B</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Stock en centro bajo</label>
+          <select id="cruce-stk" onchange="cruceOnFilter()">
+            <option value="">Todos</option>
+            <option value="1">Solo con stock</option>
+            <option value="0">Solo sin stock</option>
           </select>
         </div>
         <div class="filter-group">
           <label>Buscar material</label>
-          <input type="text" id="cruce-search" placeholder="Código o descripción…" oninput="renderCruce()" style="min-width:200px;">
+          <input type="text" id="cruce-search" placeholder="Código o descripción…" oninput="cruceOnFilter()" style="min-width:200px;">
         </div>
         <div style="margin-left:auto; display:flex; align-items:flex-end; gap:8px;">
           <span class="filter-results" id="cruce-count"></span>
@@ -1273,21 +1306,7 @@
       </div>
       <div class="mat-table-wrap">
         <table class="mat-table">
-          <thead>
-            <tr>
-              <th onclick="sortCruce('mat')">Material <span class="sort-indicator" id="si-cruce-mat"></span></th>
-              <th onclick="sortCruce('desc')" style="min-width:200px">Descripción</th>
-              <th onclick="sortCruce('grupo')">Grupo</th>
-              <th onclick="sortCruce('cls5')" style="text-align:center">4105</th>
-              <th onclick="sortCruce('cls6')" style="text-align:center">4106</th>
-              <th onclick="sortCruce('stk5')" style="text-align:right">Stock 4105</th>
-              <th onclick="sortCruce('stk6')" style="text-align:right">Stock 4106</th>
-              <th onclick="sortCruce('vta5')" style="text-align:right">Vtas 4105</th>
-              <th onclick="sortCruce('vta6')" style="text-align:right">Vtas 4106</th>
-              <th onclick="sortCruce('costo')" style="text-align:right">Costo Unit</th>
-              <th onclick="sortCruce('prom6')" style="text-align:right">Prom 6M</th>
-            </tr>
-          </thead>
+          <thead id="cruce-thead"></thead>
           <tbody id="cruce-tbody"></tbody>
         </table>
       </div>
@@ -2417,7 +2436,7 @@ async function bootstrap() {
   buildAlmTables();
   populateGrupoDropdowns();
   initMainFilters();
-  window.cruceFiltered = window.MAT_ALL ? window.MAT_ALL.filter(function(m){ return m.cruce; }) : [];
+  if (typeof buildCruceAll === 'function') buildCruceAll();
   window.catFiltered   = window.MAT_ALL ? window.MAT_ALL.slice() : [];
   gdInit();
   renderCruce();
@@ -5075,96 +5094,323 @@ function populateGrupoDropdowns() {
   });
 }
 
-/* ---- CRUCE state ---- */
+/* ---- CRUCE state (multi-centro) ---- */
 let crucePage = 1; const CRUCE_PER = 50;
-let cruceFiltered = []; let cruceSortKey = 'mat'; let cruceSortAsc = true;
+let cruceFiltered = []; let cruceSortKey = 'valLow'; let cruceSortAsc = false;
+
+var CRUCE_CENTROS = [];    // centros detectados en el snapshot activo
+var CRUCE_ALL     = [];    // un registro por material con cruce
+var CRUCE_SET     = null;  // { material: true } — lo consulta el catálogo
+
+const CRUCE_LOW  = ['D','E'];
+const CRUCE_HIGH = ['A','B'];
+
+function cruceFmtMXN(v) { return '$' + Math.round(v||0).toLocaleString('es-MX'); }
+
+function cruceChip(cls) {
+  var k = ['A','B','C','D','E','N'].indexOf(cls) >= 0 ? cls.toLowerCase() : 'n';
+  return '<span class="chip chip-' + k + '">' + (cls || '—') + '</span>';
+}
+
+/* Centros realmente presentes en los datos cargados */
+function cruceDetectCentros() {
+  var seen = {};
+  if (window.GD_ROWS && GD_ROWS.length) GD_ROWS.forEach(function(r){ if (r.centro) seen[r.centro] = 1; });
+  if (window.MAT_ALL && MAT_ALL.length) MAT_ALL.forEach(function(m){
+    if (m.cc) Object.keys(m.cc).forEach(function(c){ seen[c] = 1; });
+  });
+  var list = Object.keys(seen).sort();
+  return list.length ? list : ['4105','4106'];
+}
+
+/* Construye CRUCE_ALL desde el detalle material x centro (GD_ROWS),
+   que es la única fuente con la clase ABC real de cada centro.       */
+function buildCruceAll() {
+  CRUCE_CENTROS = cruceDetectCentros();
+  var byMat = {};
+  var src = (window.GD_ROWS && GD_ROWS.length) ? GD_ROWS : [];
+
+  src.forEach(function(r){
+    var m = byMat[r.mat];
+    if (!m) m = byMat[r.mat] = {mat:r.mat, desc:r.desc||'', grupo:r.grupo||'',
+      costo:0, prom6:0, prom12:0, proveedor:r.proveedor||'', c:{}};
+    if (!m.desc  && r.desc)  m.desc  = r.desc;
+    if (!m.grupo && r.grupo) m.grupo = r.grupo;
+    if (!m.proveedor && r.proveedor) m.proveedor = r.proveedor;
+    m.costo  = Math.max(m.costo,  r.costo || 0);
+    m.prom6  = Math.max(m.prom6,  r.p6    || 0);
+    m.prom12 = Math.max(m.prom12, r.p12   || 0);
+    m.c[r.centro] = {cls: r.cls_c || '—', stk: r.stk_c || 0, vta: r.vta || 0, fal: r.fal || 0};
+  });
+
+  /* Respaldo para snapshots antiguos sin GD_ROWS: solo 4105/4106 */
+  if (!src.length && window.MAT_ALL) {
+    MAT_ALL.forEach(function(m){
+      byMat[m.mat] = {mat:m.mat, desc:m.desc, grupo:m.grupo, costo:m.costo||0,
+        prom6:m.prom6||0, prom12:m.prom12||0, proveedor:m.proveedor||'',
+        c:{'4105':{cls:m.cls5||'—', stk:m.stk5||0, vta:m.vta5||0, fal:m.fal5||0},
+           '4106':{cls:m.cls6||'—', stk:m.stk6||0, vta:m.vta6||0, fal:m.fal6||0}}};
+    });
+  }
+
+  CRUCE_ALL = [];
+  Object.keys(byMat).forEach(function(k){
+    var m = byMat[k], lows = [], highs = [], stkLow = 0;
+    CRUCE_CENTROS.forEach(function(c){
+      var e = m.c[c];
+      m['cls_'+c] = e ? e.cls : '—';
+      m['stk_'+c] = e ? e.stk : 0;
+      m['vta_'+c] = e ? e.vta : 0;
+      if (!e) return;
+      if (CRUCE_LOW.indexOf(e.cls)  >= 0) { lows.push(c); stkLow += (e.stk || 0); }
+      if (CRUCE_HIGH.indexOf(e.cls) >= 0) { highs.push(c); }
+    });
+    if (!lows.length || !highs.length) return;   // no hay cruce
+    m.cLow   = lows;
+    m.cHigh  = highs;
+    m.stkLow = stkLow;
+    m.valLow = Math.round(stkLow * (m.costo || 0) * 100) / 100;
+    m.cruce  = true;
+    m.cruceLbl = lows.map(function(l){  return l + ' ' + m.c[l].cls; }).join(' / ') + ' → ' +
+                 highs.map(function(h){ return h + ' ' + m.c[h].cls; }).join(' / ');
+    CRUCE_ALL.push(m);
+  });
+
+  CRUCE_SET = {};
+  CRUCE_ALL.forEach(function(m){ CRUCE_SET[m.mat] = true; });
+
+  var lbl = document.getElementById('cruce-centros-lbl');
+  if (lbl) lbl.textContent = CRUCE_CENTROS.join(' · ');
+  cruceBuildSelects();
+  cruceBuildHead();
+}
+
+/* Pares (centro bajo, centro alto) del material que pasan los filtros de centro */
+function crucePairsOf(m, low, high) {
+  var out = [];
+  m.cLow.forEach(function(l){
+    if (low && l !== low) return;
+    m.cHigh.forEach(function(h){
+      if (high && h !== high) return;
+      if (l === h) return;
+      out.push([l, h]);
+    });
+  });
+  return out;
+}
+
+function cruceBuildSelects() {
+  ['cruce-low','cruce-high'].forEach(function(id){
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    var prev = sel.value;
+    sel.innerHTML = '<option value="">Todos</option>';
+    CRUCE_CENTROS.forEach(function(c){
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c; sel.appendChild(o);
+    });
+    if (prev && sel.querySelector('option[value="'+prev+'"]')) sel.value = prev;
+  });
+}
+
+function cruceBuildHead() {
+  var thead = document.getElementById('cruce-thead');
+  if (!thead) return;
+  var h = '<tr>' +
+    '<th onclick="sortCruce(\'mat\')">Material <span class="sort-indicator" id="si-cruce-mat"></span></th>' +
+    '<th onclick="sortCruce(\'desc\')" style="min-width:200px">Descripción <span class="sort-indicator" id="si-cruce-desc"></span></th>' +
+    '<th onclick="sortCruce(\'grupo\')">Grupo <span class="sort-indicator" id="si-cruce-grupo"></span></th>';
+  CRUCE_CENTROS.forEach(function(c){
+    h += '<th onclick="sortCruce(\'cls_'+c+'\')" style="text-align:center" title="Clase ABC · stock · ventas en el centro '+c+'">' +
+         c + ' <span class="sort-indicator" id="si-cruce-cls_'+c+'"></span></th>';
+  });
+  h += '<th style="min-width:150px">Cruce</th>' +
+    '<th onclick="sortCruce(\'stkLow\')" style="text-align:right" title="Stock acumulado en los centros donde el material es D/E">Stk en bajo <span class="sort-indicator" id="si-cruce-stkLow"></span></th>' +
+    '<th onclick="sortCruce(\'valLow\')" style="text-align:right" title="Stock en centro bajo × costo unitario">Valor inm. <span class="sort-indicator" id="si-cruce-valLow"></span></th>' +
+    '<th onclick="sortCruce(\'costo\')" style="text-align:right">Costo Unit <span class="sort-indicator" id="si-cruce-costo"></span></th>' +
+    '<th onclick="sortCruce(\'prom6\')" style="text-align:right">Prom 6M <span class="sort-indicator" id="si-cruce-prom6"></span></th>' +
+    '</tr>';
+  thead.innerHTML = h;
+  var si = document.getElementById('si-cruce-' + cruceSortKey);
+  if (si) si.textContent = cruceSortAsc ? '↑' : '↓';
+}
+
+function cruceOnFilter() { crucePage = 1; renderCruce(); }
+
+function cruceSetPair(l, h) {
+  var sl = document.getElementById('cruce-low'), sh = document.getElementById('cruce-high');
+  if (sl) sl.value = l;
+  if (sh) sh.value = h;
+  var btn = document.getElementById('cruce-mtx-clear');
+  if (btn) btn.style.display = '';
+  cruceOnFilter();
+}
+
+function cruceClearPair() {
+  var sl = document.getElementById('cruce-low'), sh = document.getElementById('cruce-high');
+  if (sl) sl.value = '';
+  if (sh) sh.value = '';
+  var btn = document.getElementById('cruce-mtx-clear');
+  if (btn) btn.style.display = 'none';
+  cruceOnFilter();
+}
 
 function getCruceData() {
-  const grupo = document.getElementById('cruce-grupo').value;
-  const dir = document.getElementById('cruce-dir').value;
-  const search = document.getElementById('cruce-search').value.toLowerCase().trim();
-  let data = MAT_ALL.filter(m => m.cruce);
-  if (grupo) data = data.filter(m => m.grupo === grupo);
-  if (dir === '5low') data = data.filter(m => (m.cls5==='D'||m.cls5==='E') && (m.cls6==='A'||m.cls6==='B'));
-  else if (dir === '6low') data = data.filter(m => (m.cls6==='D'||m.cls6==='E') && (m.cls5==='A'||m.cls5==='B'));
-  else if (dir === 'DE_A') data = data.filter(m => (m.cls5==='E'&&m.cls6==='A')||(m.cls6==='E'&&m.cls5==='A'));
-  else if (dir === 'DE_B') data = data.filter(m => (m.cls5==='E'&&m.cls6==='B')||(m.cls6==='E'&&m.cls5==='B'));
-  if (search) data = data.filter(m => m.mat.toLowerCase().includes(search)||m.desc.toLowerCase().includes(search));
-  data = [...data].sort((a,b) => {
-    let va = a[cruceSortKey]||'', vb = b[cruceSortKey]||'';
-    if (typeof va === 'number') return cruceSortAsc ? va-vb : vb-va;
-    return cruceSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  var grupo  = (document.getElementById('cruce-grupo')  || {}).value || '';
+  var low    = (document.getElementById('cruce-low')    || {}).value || '';
+  var high   = (document.getElementById('cruce-high')   || {}).value || '';
+  var sev    = (document.getElementById('cruce-sev')    || {}).value || '';
+  var stkF   = (document.getElementById('cruce-stk')    || {}).value || '';
+  var search = ((document.getElementById('cruce-search') || {}).value || '').toLowerCase().trim();
+
+  var data = CRUCE_ALL;
+  if (low || high) data = data.filter(function(m){ return crucePairsOf(m, low, high).length > 0; });
+  if (grupo) data = data.filter(function(m){ return m.grupo === grupo; });
+  if (sev) data = data.filter(function(m){
+    return crucePairsOf(m, low, high).some(function(p){
+      return m.c[p[0]].cls + '_' + m.c[p[1]].cls === sev;
+    });
   });
-  return data;
+  if (stkF === '1') data = data.filter(function(m){ return m.stkLow >  0; });
+  if (stkF === '0') data = data.filter(function(m){ return m.stkLow === 0; });
+  if (search) data = data.filter(function(m){
+    return m.mat.toLowerCase().indexOf(search) >= 0 || (m.desc||'').toLowerCase().indexOf(search) >= 0;
+  });
+
+  var k = cruceSortKey, asc = cruceSortAsc;
+  return data.slice().sort(function(a,b){
+    var va = a[k], vb = b[k];
+    if (va === undefined || va === null) va = '';
+    if (vb === undefined || vb === null) vb = '';
+    if (typeof va === 'number' && typeof vb === 'number') return asc ? va - vb : vb - va;
+    return asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
 }
 
 function sortCruce(key) {
   if (cruceSortKey === key) cruceSortAsc = !cruceSortAsc;
-  else { cruceSortKey = key; cruceSortAsc = true; }
-  document.querySelectorAll('[id^=si-cruce]').forEach(el => el.textContent = '');
-  const el = document.getElementById('si-cruce-'+key);
+  else { cruceSortKey = key; cruceSortAsc = (key === 'mat' || key === 'desc' || key === 'grupo' || key.indexOf('cls_') === 0); }
+  document.querySelectorAll('[id^=si-cruce]').forEach(function(el){ el.textContent = ''; });
+  var el = document.getElementById('si-cruce-' + key);
   if (el) el.textContent = cruceSortAsc ? '↑' : '↓';
   crucePage = 1; renderCruce();
 }
 
+/* Matriz centro bajo (filas) x centro alto (columnas) */
+function cruceRenderMatrix() {
+  var head = document.getElementById('cruce-matrix-head');
+  var body = document.getElementById('cruce-matrix-body');
+  if (!head || !body) return;
+  var C = CRUCE_CENTROS, n = {}, v = {};
+  C.forEach(function(l){ n[l] = {}; v[l] = {}; C.forEach(function(h){ n[l][h] = 0; v[l][h] = 0; }); });
+  CRUCE_ALL.forEach(function(m){
+    m.cLow.forEach(function(l){
+      m.cHigh.forEach(function(h){
+        if (l === h || !n[l] || n[l][h] === undefined) return;
+        n[l][h]++;
+        v[l][h] += (m.c[l].stk || 0) * (m.costo || 0);
+      });
+    });
+  });
+
+  var h = '<tr><th style="text-align:left;min-width:190px">Exceso D/E ↓ &nbsp;·&nbsp; Demanda A/B →</th>';
+  C.forEach(function(c){ h += '<th style="text-align:center">' + c + '</th>'; });
+  h += '<th style="text-align:center">Total fila</th></tr>';
+  head.innerHTML = h;
+
+  body.innerHTML = C.map(function(l){
+    var tot = 0, totv = 0, tds = '';
+    C.forEach(function(hh){
+      var cnt = n[l][hh], val = v[l][hh];
+      if (l === hh) { tds += '<td style="text-align:center;color:var(--text3)">—</td>'; return; }
+      tot += cnt; totv += val;
+      if (!cnt) { tds += '<td style="text-align:center;color:var(--text3)">0</td>'; return; }
+      tds += '<td style="text-align:center;cursor:pointer;color:var(--gold)" ' +
+             'onclick="cruceSetPair(\'' + l + '\',\'' + hh + '\')" ' +
+             'title="' + cruceFmtMXN(val) + ' inmovilizado en ' + l + '">' +
+             cnt.toLocaleString('es-MX') +
+             '<div style="font-size:10px;color:var(--text3)">' + cruceFmtMXN(val) + '</div></td>';
+    });
+    return '<tr><td style="font-family:var(--font-num);color:var(--text2)">' + l + '</td>' + tds +
+           '<td style="text-align:center;font-weight:600">' + tot.toLocaleString('es-MX') +
+           '<div style="font-size:10px;color:var(--text3);font-weight:400">' + cruceFmtMXN(totv) + '</div></td></tr>';
+  }).join('');
+}
+
 function renderCruce() {
+  if (!CRUCE_CENTROS.length) buildCruceAll();
+
   cruceFiltered = getCruceData();
-  const total = cruceFiltered.length;
-  const totalPages = Math.max(1, Math.ceil(total / CRUCE_PER));
+  var total = cruceFiltered.length;
+  var totalPages = Math.max(1, Math.ceil(total / CRUCE_PER));
   if (crucePage > totalPages) crucePage = totalPages;
-  const slice = cruceFiltered.slice((crucePage-1)*CRUCE_PER, crucePage*CRUCE_PER);
+  var slice = cruceFiltered.slice((crucePage-1)*CRUCE_PER, crucePage*CRUCE_PER);
   document.getElementById('cruce-count').textContent = total.toLocaleString('es-MX') + ' materiales';
-  document.getElementById('cruce-page-info').textContent = `Pág ${crucePage} / ${totalPages} (${total.toLocaleString('es-MX')} registros)`;
+  document.getElementById('cruce-page-info').textContent =
+    'Pág ' + crucePage + ' / ' + totalPages + ' (' + total.toLocaleString('es-MX') + ' registros)';
   document.getElementById('cruce-prev').disabled = crucePage <= 1;
   document.getElementById('cruce-next').disabled = crucePage >= totalPages;
 
-  // update KPIs
-  const all_cross = MAT_ALL.filter(m=>m.cruce);
-  const low=['D','E'], high=['A','B'];
-  const fmtMXN = v => '$' + Math.round(v).toLocaleString('es-MX');
-  const valOf = (arr, side) => arr.reduce((s,m) => {
-    const stk = side==='5' ? m.stk5 : side==='6' ? m.stk6 : (m.stk5+m.stk6);
-    return s + stk * m.costo;
-  }, 0);
+  /* ── KPIs (panorama global, todos los centros) ── */
+  var valTotal = 0, byLow = {}, sevList = [], sevVal = 0, riskN = 0, riskVal = 0, riskPzs = 0;
+  CRUCE_ALL.forEach(function(m){
+    valTotal += m.valLow;
+    m.cLow.forEach(function(l){
+      byLow[l] = (byLow[l] || 0) + (m.c[l].stk || 0) * (m.costo || 0);
+    });
+    var esSevero = m.cLow.some(function(l){
+      return m.c[l].cls === 'E' && m.cHigh.some(function(h){ return m.c[h].cls === 'A'; });
+    });
+    if (esSevero) { sevList.push(m); sevVal += m.valLow; }
+    if (m.stkLow > 0) { riskN++; riskVal += m.valLow; riskPzs += m.stkLow; }
+  });
+  var topLow = Object.keys(byLow).sort(function(a,b){ return byLow[b]-byLow[a]; })[0];
 
-  const g5low = all_cross.filter(m=>low.includes(m.cls5)&&high.includes(m.cls6));
-  const g6low = all_cross.filter(m=>low.includes(m.cls6)&&high.includes(m.cls5));
-  const gRisk = all_cross.filter(m=>(low.includes(m.cls5)&&m.stk5>0)||(low.includes(m.cls6)&&m.stk6>0));
+  document.getElementById('ck-total').textContent = CRUCE_ALL.length.toLocaleString('es-MX');
+  document.getElementById('ck-total-val').textContent = cruceFmtMXN(valTotal) + ' inm. en centros D/E';
+  document.getElementById('ck-top-low').textContent = topLow || '—';
+  document.getElementById('ck-top-low-val').textContent = topLow ? cruceFmtMXN(byLow[topLow]) + ' inmovilizado' : '—';
+  document.getElementById('ck-sev').textContent = sevList.length.toLocaleString('es-MX');
+  document.getElementById('ck-sev-val').textContent = cruceFmtMXN(sevVal) + ' inmovilizado';
+  document.getElementById('ck-stock-risk').textContent = riskN.toLocaleString('es-MX');
+  var riskPct = CRUCE_ALL.length ? Math.round(riskN / CRUCE_ALL.length * 100) : 0;
+  document.getElementById('ck-stock-risk-val').textContent =
+    riskPzs.toLocaleString('es-MX') + ' pzas · ' + riskPct + '% de los cruces';
 
-  document.getElementById('ck-total').textContent = all_cross.length.toLocaleString('es-MX');
-  document.getElementById('ck-total-val').textContent = fmtMXN(valOf(all_cross,'both'));
-  document.getElementById('ck-5low').textContent = g5low.length.toLocaleString('es-MX');
-  document.getElementById('ck-5low-val').textContent = fmtMXN(valOf(g5low,'5')) + ' inm. en 4105';
-  document.getElementById('ck-6low').textContent = g6low.length.toLocaleString('es-MX');
-  document.getElementById('ck-6low-val').textContent = fmtMXN(valOf(g6low,'6')) + ' inm. en 4106';
-  document.getElementById('ck-stock-risk').textContent = gRisk.length.toLocaleString('es-MX');
-  const riskVal = gRisk.reduce((s,m)=>{
-    const v5 = low.includes(m.cls5) && m.stk5>0 ? m.stk5*m.costo : 0;
-    const v6 = low.includes(m.cls6) && m.stk6>0 ? m.stk6*m.costo : 0;
-    return s + v5 + v6;
-  },0);
-  document.getElementById('ck-stock-risk-val').textContent = fmtMXN(riskVal) + ' en riesgo';
+  cruceRenderMatrix();
 
-  const tbody = document.getElementById('cruce-tbody');
-  if (!slice.length) { tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text3);">Sin resultados para los filtros seleccionados.</td></tr>'; return; }
-  tbody.innerHTML = slice.map(m => {
-    const c5low = ['D','E'].includes(m.cls5), c6low = ['D','E'].includes(m.cls6);
-    const chip5 = `<span class="chip chip-${m.cls5.toLowerCase()}${m.cls5==='—'?'-n':''}">${m.cls5}</span>`;
-    const chip6 = `<span class="chip chip-${m.cls6.toLowerCase()}${m.cls6==='—'?'-n':''}">${m.cls6}</span>`;
-    const riskIndicator = (c5low&&m.stk5>0)||(c6low&&m.stk6>0) ? ' <span style="color:#f85149;font-size:10px;">● stock</span>' : '';
-    return `<tr>
-      <td style="font-family:var(--font-num);color:var(--gold)">${m.mat}${riskIndicator}</td>
-      <td class="desc-cell" title="${m.desc}">${m.desc}</td>
-      <td style="font-family:var(--font);color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${m.grupo}">${m.grupo}</td>
-      <td style="text-align:center">${chip5}</td>
-      <td style="text-align:center">${chip6}</td>
-      <td style="text-align:right;${c5low&&m.stk5>0?'color:#f85149;font-weight:500':''}">${m.stk5.toLocaleString('es-MX')}</td>
-      <td style="text-align:right;${c6low&&m.stk6>0?'color:#f85149;font-weight:500':''}">${m.stk6.toLocaleString('es-MX')}</td>
-      <td style="text-align:right">${m.vta5.toLocaleString('es-MX')}</td>
-      <td style="text-align:right">${m.vta6.toLocaleString('es-MX')}</td>
-      <td style="text-align:right">${m.costo>0?'$'+m.costo.toFixed(2):'—'}</td>
-      <td style="text-align:right;color:var(--text2)">${m.prom6.toFixed(1)}</td>
-    </tr>`;
+  /* ── Detalle ── */
+  var tbody = document.getElementById('cruce-tbody');
+  var cols = 3 + CRUCE_CENTROS.length + 5;
+  if (!slice.length) {
+    tbody.innerHTML = '<tr><td colspan="' + cols + '" style="text-align:center;padding:24px;color:var(--text3);">' +
+      'Sin resultados para los filtros seleccionados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = slice.map(function(m){
+    var tds = '';
+    CRUCE_CENTROS.forEach(function(c){
+      var e = m.c[c];
+      var cls = e ? e.cls : '—';
+      var esBajo = CRUCE_LOW.indexOf(cls) >= 0;
+      var sub = e ? ('stk ' + (e.stk||0).toLocaleString('es-MX') + ' · vta ' + (e.vta||0).toLocaleString('es-MX'))
+                  : 'sin registro';
+      tds += '<td style="text-align:center">' + cruceChip(cls) +
+             '<div style="font-size:10px;margin-top:3px;' +
+             (esBajo && e && e.stk > 0 ? 'color:#f85149' : 'color:var(--text3)') + '">' + sub + '</div></td>';
+    });
+    var riesgo = m.stkLow > 0 ? ' <span style="color:#f85149;font-size:10px;">● stock</span>' : '';
+    return '<tr>' +
+      '<td style="font-family:var(--font-num);color:var(--gold)">' + m.mat + riesgo + '</td>' +
+      '<td class="desc-cell" title="' + m.desc + '">' + m.desc + '</td>' +
+      '<td style="font-family:var(--font);color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis" title="' + m.grupo + '">' + m.grupo + '</td>' +
+      tds +
+      '<td style="font-size:11px;color:var(--text2);font-family:var(--font-num)">' + m.cruceLbl + '</td>' +
+      '<td style="text-align:right;' + (m.stkLow > 0 ? 'color:#f85149;font-weight:500' : '') + '">' + m.stkLow.toLocaleString('es-MX') + '</td>' +
+      '<td style="text-align:right">' + (m.valLow > 0 ? cruceFmtMXN(m.valLow) : '—') + '</td>' +
+      '<td style="text-align:right">' + (m.costo > 0 ? '$' + m.costo.toFixed(2) : '—') + '</td>' +
+      '<td style="text-align:right;color:var(--text2)">' + (m.prom6 || 0).toFixed(1) + '</td>' +
+      '</tr>';
   }).join('');
 }
 
@@ -5212,7 +5458,7 @@ function getCatData() {
   if (grupo) data = data.filter(m => m.grupo === grupo);
   if (cls5) data = data.filter(m => m.cls5 === cls5);
   if (cls6) data = data.filter(m => m.cls6 === cls6);
-  if (onlyCruce === 'yes') data = data.filter(m => m.cruce);
+  if (onlyCruce === 'yes') data = data.filter(m => CRUCE_SET ? !!CRUCE_SET[m.mat] : !!m.cruce);
   if (search) data = data.filter(m => m.mat.toLowerCase().includes(search)||m.desc.toLowerCase().includes(search)||(m.proveedor||'').toLowerCase().includes(search));
   data = [...data].sort((a,b) => {
     let va = a[catSortKey]||'', vb = b[catSortKey]||'';
@@ -5259,7 +5505,8 @@ function renderCatalogo() {
   const tbody = document.getElementById('cat-tbody');
   if (!slice.length) { tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--text3);">Sin resultados.</td></tr>'; return; }
   tbody.innerHTML = slice.map(m => {
-    const hasCruce = m.cruce ? `<span style="color:var(--gold);font-size:10px;margin-left:4px;">⇄</span>` : '';
+    const esCruce = CRUCE_SET ? !!CRUCE_SET[m.mat] : !!m.cruce;
+    const hasCruce = esCruce ? `<span style="color:var(--gold);font-size:10px;margin-left:4px;" title="Cruce D/E ↔ A/B entre centros">⇄</span>` : '';
     return `<tr>
       <td style="font-family:var(--font-num);color:var(--gold)">${m.mat}${hasCruce}</td>
       <td class="desc-cell" title="${m.desc}">${m.desc}</td>
@@ -5287,12 +5534,18 @@ function changePage(ctx, dir) {
 function exportCSV(ctx) {
   const data = ctx === 'cruce' ? cruceFiltered : catFiltered;
   if (!data.length) return;
+  const CC = (typeof CRUCE_CENTROS !== 'undefined' && CRUCE_CENTROS.length) ? CRUCE_CENTROS : ['4105','4106'];
   const headers = ctx === 'cruce'
-    ? ['Material','Descripcion','Grupo','Cls_4105','Cls_4106','Cruce','Stock_4105','Stock_4106','Ventas_4105','Ventas_4106','Costo_Unit','Prom_6M']
+    ? ['Material','Descripcion','Grupo']
+        .concat(CC.map(c => 'Cls_'+c), CC.map(c => 'Stock_'+c), CC.map(c => 'Ventas_'+c),
+                ['Centros_DE','Centros_AB','Cruce','Stock_en_centro_bajo','Valor_inmovilizado','Costo_Unit','Prom_6M'])
     : ['Material','Descripcion','Grupo','Cls_4105','Cls_4106','Cruce','Stock_4105','Stock_4106','Ventas_4105','Ventas_4106','Costo_Unit','Valor_Inv','Prom_6M','Proveedor'];
   const rows = data.map(m => ctx === 'cruce'
-    ? [m.mat,`"${m.desc}"`,`"${m.grupo}"`,m.cls5,m.cls6,`"${m.cruce}"`,m.stk5,m.stk6,m.vta5,m.vta6,m.costo,m.prom6]
-    : [m.mat,`"${m.desc}"`,`"${m.grupo}"`,m.cls5,m.cls6,`"${m.cruce||''}"`,m.stk5,m.stk6,m.vta5,m.vta6,m.costo,m.valor,m.prom6,`"${m.proveedor||''}"`]);
+    ? [m.mat,`"${m.desc}"`,`"${m.grupo}"`]
+        .concat(CC.map(c => m['cls_'+c] || '—'), CC.map(c => m['stk_'+c] || 0), CC.map(c => m['vta_'+c] || 0),
+                [`"${(m.cLow||[]).join(' ')}"`,`"${(m.cHigh||[]).join(' ')}"`,`"${m.cruceLbl||''}"`,
+                 m.stkLow||0, m.valLow||0, m.costo, m.prom6])
+    : [m.mat,`"${m.desc}"`,`"${m.grupo}"`,m.cls5,m.cls6,`"${(CRUCE_SET&&CRUCE_SET[m.mat])?'si':''}"`,m.stk5,m.stk6,m.vta5,m.vta6,m.costo,m.valor,m.prom6,`"${m.proveedor||''}"`]);
   const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);

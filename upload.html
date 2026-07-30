@@ -145,6 +145,7 @@ function showAlert(msg, type) {
 
 // ── XLS Processing ──────────────────────────────────────────────
 const CLASSES    = ['A','B','C','D','E','N'];
+const CENTROS    = ['4105','4106','4111','4113'];
 const MONTH_KEYS = ['C(04.2025)','C(05.2025)','C(06.2025)','C(07.2025)',
   'C(08.2025)','C(09.2025)','C(10.2025)','C(11.2025)',
   'C(12.2025)','C(01.2026)','C(02.2026)','C(03.2026)'];
@@ -201,7 +202,8 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
     if (grpName && !grpMap[grpName]) grpMap[grpName]={g:grpName,valor:0,mats:new Set(),ventas:0,fallas:0};
 
     const mcKey=mat+'|'+centro;
-    if (!mcMap[mcKey]) {
+    const primeraFilaDelCentro = !mcMap[mcKey];
+    if (primeraFilaDelCentro) {
       mcMap[mcKey]={mat,desc,grupo:grpName,grp:grpCode,centro,cls_c:ck,
         costo,stk_c:stockCtro,vta:vtas,fal:fallas,p6,p12,proveedor:prov,alms:[]};
       clsAgg[ck].mats.add(mcKey); if(centroAgg[centro]) centroAgg[centro][ck]+=valorTot;
@@ -217,18 +219,33 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
     const fechaRec = str(row['Fecha Recepcion']) || '';
     mcMap[mcKey].alms.push({a:almCode,n:almName,s:stockAlm,v:Math.round(valorAlm*100)/100,cls:clsAlm,vta:vtasAlm,p6:p6alm,p12:p12alm,fr:fechaRec});
 
-    if (!matMap[mat]) matMap[mat]={mat,desc,grupo:grpName,grp_code:grpCode,cls5:'—',cls6:'—',cruce:false,costo:0,valor:0,stk5:0,stk6:0,vta5:0,vta6:0,fal5:0,fal6:0,prom6:0,prom12:0,proveedor:prov};
+    if (!matMap[mat]) matMap[mat]={mat,desc,grupo:grpName,grp_code:grpCode,cc:{},cls5:'—',cls6:'—',cruce:false,costo:0,valor:0,stk5:0,stk6:0,vta5:0,vta6:0,fal5:0,fal6:0,prom6:0,prom12:0,proveedor:prov};
     const mm=matMap[mat];
-    if (centro==='4105'){mm.cls5=ck;mm.stk5=stockCtro;mm.vta5=vtas;mm.fal5=fallas;mm.valor+=valorTot;}
-    else{mm.cls6=ck;mm.stk6=stockCtro;mm.vta6=vtas;mm.fal6=fallas;mm.valor+=valorTot;}
+    if (primeraFilaDelCentro) {
+      // cc: clase/stock/ventas/fallas por centro — base del cruce multi-centro
+      mm.cc[centro]={cls:ck,stk:stockCtro,vta:vtas,fal:fallas,valor:valorTot};
+      mm.valor+=valorTot;   // una sola vez por centro (antes se sumaba por almacén)
+      if (centro==='4105'){mm.cls5=ck;mm.stk5=stockCtro;mm.vta5=vtas;mm.fal5=fallas;}
+      else if (centro==='4106'){mm.cls6=ck;mm.stk6=stockCtro;mm.vta6=vtas;mm.fal6=fallas;}
+    }
     mm.costo=Math.max(mm.costo,costo); mm.prom6=Math.max(mm.prom6,p6); mm.prom12=Math.max(mm.prom12,p12);
   }
 
   const low=['D','E'], high=['A','B'];
-  const matAll=Object.values(matMap).map(m=>({...m,cruce:(low.includes(m.cls5)&&high.includes(m.cls6))||(low.includes(m.cls6)&&high.includes(m.cls5))}));
+  const matAll=Object.values(matMap).map(m=>{
+    const cLow=[], cHigh=[]; let stkLow=0;
+    CENTROS.forEach(c=>{
+      const e=m.cc[c]; if(!e) return;
+      if (low.includes(e.cls))  { cLow.push(c); stkLow += e.stk||0; }
+      if (high.includes(e.cls)) { cHigh.push(c); }
+    });
+    return {...m, cLow, cHigh, stkLow,
+      valLow: Math.round(stkLow*(m.costo||0)*100)/100,
+      cruce: cLow.length>0 && cHigh.length>0};
+  });
   const gdRows=Object.values(mcMap).map(r=>({mat:r.mat,desc:r.desc,grupo:r.grupo,grp:r.grp,centro:r.centro,cls_c:r.cls_c,costo:Math.round(r.costo*100)/100,stk_c:r.stk_c,vta:r.vta,fal:r.fal,p6:r.p6,p12:r.p12,proveedor:r.proveedor,alms:r.alms}));
   const gdAlms=[];
-  ['4105','4106'].forEach(c=>Object.values(almMap[c]).sort((a,b)=>a.a.localeCompare(b.a)).forEach(a=>gdAlms.push(a)));
+  CENTROS.forEach(c=>Object.values(almMap[c]||{}).sort((a,b)=>a.a.localeCompare(b.a)).forEach(a=>gdAlms.push(a)));
 
   const dataCls=CLASSES.map(c=>{const a=clsAgg[c],n=a.pn||1;return{c,mats:a.mats.size,valor:Math.round(a.valor),stock:0,ventas:a.ventas,fallas:a.fallas,p6:Math.round(a.p6s/n*10)/10,p12:Math.round(a.p12s/n*10)/10};});
   const dataGrupos=Object.values(grpMap).map(g=>({g:g.g,mats:g.mats.size,valor:Math.round(g.valor),ventas:g.ventas,fallas:g.fallas})).sort((a,b)=>b.valor-a.valor).slice(0,15);
@@ -239,6 +256,7 @@ function processRows(rows4105, rows4106, rows4111, rows4113) {
   const totalVal=dataCls.reduce((s,d)=>s+d.valor,0);
   return {
     DATA:{cls:dataCls,months:MONTH_LABELS,monthly:Object.fromEntries(CLASSES.map(c=>[c,clsAgg[c].mon])),grupos:dataGrupos,centros:dataCentros},
+    CENTROS:CENTROS.slice(),
     MAT_ALL:matAll, GDATA:{rows:gdRows,almacenes:gdAlms,grupos:Object.keys(grpMap).sort()},
     FILTER_DATA:{monthly:fMon,almacenes:fAlm},
     summary:{total_materiales:matAll.length,total_skus:gdRows.length,valor_total:totalVal,procesado_en:new Date().toISOString()},
